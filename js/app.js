@@ -25,6 +25,7 @@
 
   // ---------- Helfer ----------
   const fmt = (n) => new Intl.NumberFormat('de-DE').format(Math.round(n));
+  const fmtDec = (n) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(n);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pct = (v, t) => (t > 0 ? Math.min(100, Math.round((v / t) * 100)) : 0);
@@ -333,7 +334,7 @@
       <section class="space-y-2">
         <h2 class="text-label-md text-on-surface-variant px-1">PERSÖNLICHE DATEN</h2>
         <div class="bg-surface-container-lowest rounded-xl overflow-hidden divide-y divide-outline-variant/20 shadow-sm">
-          ${row('scale', 'Körpergewicht', fmt(p.weight) + ' kg', 'weight', 'bg-primary')}
+          ${row('scale', 'Körpergewicht', fmtDec(p.weight) + ' kg', 'weight', 'bg-primary')}
           ${row('height', 'Größe', fmt(p.height) + ' cm', 'height', 'bg-tertiary')}
           ${row('fitness_center', 'Aktivitätslevel', ACTIVITY[p.activityLevel], 'activityLevel', 'bg-secondary')}
         </div>
