@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html class="light" lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#006c49" />
+<title>Vitality – Kalorientracker</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          'outline-variant': '#bbcabf', 'on-primary-fixed': '#002113',
+          'on-error': '#ffffff', 'primary': '#006c49',
+          'surface-container-high': '#e2e7ff', 'on-primary-container': '#00422b',
+          'background': '#faf8ff', 'on-secondary': '#ffffff',
+          'on-background': '#131b2e', 'surface-variant': '#dae2fd',
+          'error-container': '#ffdad6', 'inverse-surface': '#283044',
+          'on-surface': '#131b2e', 'inverse-primary': '#4edea3',
+          'surface-dim': '#d2d9f4', 'surface-container-low': '#f2f3ff',
+          'on-tertiary-container': '#00367a', 'on-error-container': '#93000a',
+          'on-surface-variant': '#3c4a42', 'surface-container': '#eaedff',
+          'tertiary': '#005ac2', 'surface': '#faf8ff', 'outline': '#6c7a71',
+          'surface-container-highest': '#dae2fd', 'surface-container-lowest': '#ffffff',
+          'on-primary': '#ffffff', 'on-tertiary': '#ffffff',
+          'secondary-container': '#fea619', 'surface-bright': '#faf8ff',
+          'error': '#ba1a1a', 'on-secondary-container': '#684000',
+          'inverse-on-surface': '#eef0ff', 'tertiary-container': '#71a1ff',
+          'secondary': '#855300', 'primary-container': '#10b981',
+          'primary-fixed-dim': '#4edea3',
+        },
+        borderRadius: { DEFAULT: '0.25rem', lg: '0.5rem', xl: '0.75rem', '2xl': '1rem', full: '9999px' },
+        spacing: { 'max-width': '600px', 'container-margin': '20px' },
+        fontFamily: { sans: ['Hanken Grotesk', 'sans-serif'] },
+        fontSize: {
+          display: ['40px', { lineHeight: '48px', letterSpacing: '-0.02em', fontWeight: '700' }],
+          'headline-lg': ['28px', { lineHeight: '34px', fontWeight: '700' }],
+          'headline-md': ['24px', { lineHeight: '32px', fontWeight: '600' }],
+          'body-lg': ['18px', { lineHeight: '28px', fontWeight: '400' }],
+          'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
+          'label-md': ['14px', { lineHeight: '20px', letterSpacing: '0.01em', fontWeight: '600' }],
+          'label-sm': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '500' }],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  body { font-family: 'Hanken Grotesk', sans-serif; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; min-height: 100dvh; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; user-select: none; }
+  .fill-icon { font-variation-settings: 'FILL' 1; }
+  .glass-card { background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .progress-ring-circle { transition: stroke-dashoffset .5s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  input[type='range'] { accent-color: #006c49; }
+  .sheet-enter { transform: translateY(100%); }
+  .sheet-open { transform: translateY(0); }
+  .fade-in { animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body class="bg-background text-on-background pb-28">
+
+<!-- Dynamischer View-Container -->
+<div id="view"></div>
+
+<!-- Bottom Navigation -->
+<nav id="nav" class="fixed bottom-0 w-full z-40 flex justify-around items-center px-4 pb-7 pt-2 max-w-max-width left-1/2 -translate-x-1/2 bg-surface-container-lowest shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-2xl">
+  <button data-nav="dashboard" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-full text-on-surface-variant">
+    <span class="material-symbols-outlined">dashboard</span><span class="text-label-sm">Übersicht</span>
+  </button>
+  <button data-nav="diary" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-full text-on-surface-variant">
+    <span class="material-symbols-outlined">event_note</span><span class="text-label-sm">Tagebuch</span>
+  </button>
+  <button data-nav="search" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-full text-on-surface-variant">
+    <span class="material-symbols-outlined">search</span><span class="text-label-sm">Suche</span>
+  </button>
+  <button data-nav="favorites" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-full text-on-surface-variant">
+    <span class="material-symbols-outlined">favorite</span><span class="text-label-sm">Favoriten</span>
+  </button>
+  <button data-nav="profile" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-full text-on-surface-variant">
+    <span class="material-symbols-outlined">person</span><span class="text-label-sm">Profil</span>
+  </button>
+</nav>
+
+<!-- Modal-/Sheet-Container -->
+<div id="modal-root"></div>
+
+<script src="js/store.js"></script>
+<script src="js/off.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW:', e));
+    });
+  }
+</script>
+</body>
+</html>
