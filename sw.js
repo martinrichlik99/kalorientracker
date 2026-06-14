@@ -1,15 +1,27 @@
 // sw.js — App-Shell-Cache, stale-while-revalidate
-const VERSION = 'v1.1';
+const VERSION = 'v1.3';
 const SHELL = 'kt-shell-' + VERSION;
 const SHELL_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './styles.css',
   './js/store.js',
   './js/off.js',
   './js/app.js',
+  './vendor/zxing.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './fonts/fonts.css',
+  './fonts/hanken-400-latin-ext.woff2',
+  './fonts/hanken-400-latin.woff2',
+  './fonts/hanken-500-latin-ext.woff2',
+  './fonts/hanken-500-latin.woff2',
+  './fonts/hanken-600-latin-ext.woff2',
+  './fonts/hanken-600-latin.woff2',
+  './fonts/hanken-700-latin-ext.woff2',
+  './fonts/hanken-700-latin.woff2',
+  './fonts/material-symbols.woff2',
 ];
 
 self.addEventListener('install', (e) => {

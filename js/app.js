@@ -486,12 +486,20 @@
   }
 
   // ---------- Eigenes Lebensmittel ----------
-  function openCustomFood() {
+  function openCustomFood(prefill = {}) {
+    const barcode = prefill.barcode || null;
     const f = (id, label, unit) => `<div class="flex items-center justify-between bg-surface-container-low rounded-xl p-3">
       <label class="text-body-md">${label}</label>
       <div class="flex items-center gap-2"><input id="cf-${id}" type="number" inputmode="decimal" class="w-24 bg-transparent border-none focus:ring-0 text-right text-label-md p-0" placeholder="0" /><span class="text-on-surface-variant text-label-sm w-6">${unit}</span></div></div>`;
+    const hint = barcode
+      ? `<div class="bg-secondary-container/10 rounded-xl p-3 mb-3 flex items-start gap-2">
+           <span class="material-symbols-outlined text-primary text-[20px]">info</span>
+           <p class="text-label-sm text-on-surface-variant">Barcode <span class="font-semibold">${esc(barcode)}</span> nicht in OpenFoodFacts. Einmal selbst anlegen — beim nächsten Scan ist er sofort da.</p>
+         </div>`
+      : '';
     openSheet('Eigenes Lebensmittel', `
-      <div class="bg-surface-container-low rounded-xl p-3 mb-3"><input id="cf-name" type="text" placeholder="Name" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" /></div>
+      ${hint}
+      <div class="bg-surface-container-low rounded-xl p-3 mb-3"><input id="cf-name" type="text" placeholder="Name" value="${esc(prefill.name || '')}" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" /></div>
       <p class="text-label-sm text-on-surface-variant mb-2 px-1">Werte pro 100 g</p>
       <div class="space-y-2">
         ${f('calories', 'Kalorien', 'kcal')}${f('protein', 'Eiweiß', 'g')}${f('carbs', 'Kohlenhydrate', 'g')}${f('fat', 'Fett', 'g')}
@@ -502,12 +510,16 @@
         const name = root.querySelector('#cf-name').value.trim();
         if (!name) { toast('Name eingeben'); return; }
         const food = Store.addCustomFood({
+          // Bei Barcode: id = barcode → off.js findet ihn beim nächsten Scan im Cache
+          id: barcode || undefined,
+          barcode,
           name, unit: 'g',
           calories: +root.querySelector('#cf-calories').value || 0,
           protein: +root.querySelector('#cf-protein').value || 0,
           carbs: +root.querySelector('#cf-carbs').value || 0,
           fat: +root.querySelector('#cf-fat').value || 0,
         });
+        if (barcode) Store.cacheFood(food); // unter Barcode cachen für künftige Scans
         closeModal();
         openPortionSheet(food);
       });
@@ -520,7 +532,7 @@
     if (zxingLoaded) return zxingLoaded;
     zxingLoaded = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+      s.src = 'vendor/zxing.min.js'; // lokal gehostet (offline-fest)
       s.onload = resolve; s.onerror = reject;
       document.head.appendChild(s);
     });
@@ -551,7 +563,7 @@
             const food = await OFF.byBarcode(code);
             cleanup();
             if (food) openPortionSheet(food);
-            else toast('Produkt nicht in OpenFoodFacts');
+            else openCustomFood({ barcode: code }); // Lücke füllen: selbst anlegen + cachen
           } catch { cleanup(); toast('Offline – Barcode nicht ladbar'); }
         }
       });

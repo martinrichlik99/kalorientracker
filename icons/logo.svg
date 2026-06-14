@@ -1,0 +1,39 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00925f"/>
+      <stop offset="1" stop-color="#00543a"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e8fff4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Progress ring (gap at bottom, matches in-app calorie ring) -->
+  <circle cx="256" cy="256" r="172" fill="none" stroke="#3fe0a0" stroke-width="26"
+          stroke-linecap="round" pathLength="360"
+          stroke-dasharray="306 54" transform="rotate(117 256 256)"/>
+
+  <!-- Flame -->
+  <path fill="url(#flame)" d="
+    M256 150
+    C 296 206, 328 238, 328 298
+    A 72 72 0 1 1 184 298
+    C 184 252, 208 232, 230 213
+    C 223 242, 240 256, 256 251
+    C 277 245, 282 220, 269 195
+    C 264 178, 258 165, 256 150 Z"/>
+
+  <!-- Inner flame highlight -->
+  <path fill="#1aa86e" opacity="0.9" d="
+    M256 252
+    C 280 272, 293 288, 293 310
+    A 37 37 0 1 1 219 310
+    C 219 291, 231 281, 244 273
+    C 250 288, 262 288, 268 278
+    C 272 269, 268 259, 256 252 Z"/>
+</svg>
