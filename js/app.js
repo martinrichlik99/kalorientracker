@@ -277,8 +277,27 @@
     box.innerHTML = `<div class="py-10 text-center text-on-surface-variant"><span class="material-symbols-outlined animate-spin">progress_activity</span><p class="mt-2 text-label-md">Suche…</p></div>`;
     if (searchAbort) searchAbort.abort();
     searchAbort = new AbortController();
+    const sig = { signal: searchAbort.signal };
     try {
-      const list = await OFF.search(term, { signal: searchAbort.signal });
+        // Lokale DE-Datenbank sofort (synchron)
+      const local = FoodsDE.search(term);
+
+      const [offResults, usdaResults] = await Promise.allSettled([
+        OFF.search(term, sig),
+        USDA.search(term, sig),
+      ]);
+      if (offResults.reason?.name === 'AbortError') return;
+
+      const off = offResults.status === 'fulfilled' ? offResults.value : [];
+      const usda = usdaResults.status === 'fulfilled' ? usdaResults.value : [];
+
+      // Duplikate raus — lokale Treffer haben Vorrang
+      const localNames = new Set(local.map((f) => f.name.toLowerCase()));
+      const offFiltered = off.filter((f) => !localNames.has(f.name.toLowerCase()));
+      const allNames = new Set([...localNames, ...offFiltered.map((f) => f.name.toLowerCase())]);
+      const usdaFiltered = usda.filter((f) => !allNames.has(f.name.toLowerCase()));
+
+      const list = [...local, ...offFiltered, ...usdaFiltered];
       box.innerHTML = list.length
         ? section(`Treffer für „${esc(term)}"`, list.map(foodRow).join(''))
         : empty('Keine Treffer', 'Anderen Begriff versuchen oder eigenes Lebensmittel anlegen.');

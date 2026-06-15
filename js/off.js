@@ -11,7 +11,7 @@ function mapProduct(p) {
   return {
     id: p.code || name,
     name: p.brands ? `${name} (${p.brands.split(',')[0]})` : name,
-    calories: num(n['energy-kcal_100g']),
+    calories: num(n['energy-kcal_100g']) || Math.round(num(n['energy_100g']) / 4.184),
     protein: num(n.proteins_100g),
     carbs: num(n.carbohydrates_100g),
     fat: num(n.fat_100g),
