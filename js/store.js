@@ -113,6 +113,21 @@ function groupByMeal(entries) {
   return meals;
 }
 
+// ---------- Export (Tages-Summen für Fitness-Dashboard) ----------
+function getAllDaySummaries() {
+  const byDate = {};
+  for (const e of getDiary()) {
+    const d = (byDate[e.date] ||= { date: e.date, calories: 0, protein: 0, carbs: 0, fat: 0 });
+    d.calories += e.calories;
+    d.protein += e.protein;
+    d.carbs += e.carbs;
+    d.fat += e.fat;
+  }
+  return Object.values(byDate)
+    .map((d) => ({ ...d, calories: round(d.calories), protein: round(d.protein), carbs: round(d.carbs), fat: round(d.fat) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ---------- Favoriten ----------
 function getFavorites() {
   return read(LS.favorites, []);
@@ -226,6 +241,7 @@ window.Store = {
   removeDiaryEntry,
   updateDiaryEntry,
   daySummary,
+  getAllDaySummaries,
   getFavorites,
   isFavorite,
   toggleFavorite,

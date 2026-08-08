@@ -371,6 +371,9 @@
             ${MACROS.map(macroSlider).join('')}</div>
         </div>
       </section>
+      <button id="export-data" class="w-full py-3 text-primary font-semibold bg-surface-container-lowest rounded-xl shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[20px]">ios_share</span>Daten exportieren (Fitness-Dashboard)
+      </button>
       <button id="reset-day" class="w-full py-3 text-error font-semibold bg-surface-container-lowest rounded-xl shadow-sm active:scale-[0.98] transition">Heutigen Tag zurücksetzen</button>
       <p class="text-center text-label-sm text-on-surface-variant">Vitality · V1 · lokal gespeichert</p>
     </main>`;
@@ -390,6 +393,32 @@
       Store.getDiaryByDate(Store.todayStr()).forEach((e) => Store.removeDiaryEntry(e.id));
       toast('Heutiger Tag zurückgesetzt');
     });
+    document.getElementById('export-data').addEventListener('click', exportForDashboard);
+  }
+
+  // ---------- Export für Fitness-Dashboard ----------
+  async function exportForDashboard() {
+    const payload = { exportedAt: new Date().toISOString(), days: Store.getAllDaySummaries() };
+    const json = JSON.stringify(payload, null, 2);
+    const file = new File([json], 'kalorientracker-export.json', { type: 'application/json' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Kalorientracker-Export' });
+        toast('Export geteilt');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // Nutzer hat abgebrochen
+      }
+    }
+    // Fallback: normaler Download (Desktop-Browser)
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Export heruntergeladen');
   }
   function bindSlider(sliderId, valId, label, save) {
     const s = document.getElementById(sliderId), v = document.getElementById(valId);
