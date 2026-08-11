@@ -117,11 +117,15 @@ function groupByMeal(entries) {
 function getAllDaySummaries() {
   const byDate = {};
   for (const e of getDiary()) {
-    const d = (byDate[e.date] ||= { date: e.date, calories: 0, protein: 0, carbs: 0, fat: 0 });
+    const d = (byDate[e.date] ||= { date: e.date, calories: 0, protein: 0, carbs: 0, fat: 0, entries: [] });
     d.calories += e.calories;
     d.protein += e.protein;
     d.carbs += e.carbs;
     d.fat += e.fat;
+    d.entries.push({
+      name: e.foodName, mealType: e.mealType, portion: e.portion, unit: e.unit,
+      calories: e.calories, protein: e.protein, carbs: e.carbs, fat: e.fat,
+    });
   }
   return Object.values(byDate)
     .map((d) => ({ ...d, calories: round(d.calories), protein: round(d.protein), carbs: round(d.carbs), fat: round(d.fat) }))

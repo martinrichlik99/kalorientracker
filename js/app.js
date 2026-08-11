@@ -398,7 +398,12 @@
 
   // ---------- Export für Fitness-Dashboard ----------
   async function exportForDashboard() {
-    const payload = { exportedAt: new Date().toISOString(), days: Store.getAllDaySummaries() };
+    const p = Store.getProfile();
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      targets: { calories: p.dailyCalorieTarget, protein: p.proteinTarget, carbs: p.carbsTarget, fat: p.fatTarget },
+      days: Store.getAllDaySummaries(),
+    };
     const json = JSON.stringify(payload, null, 2);
     const file = new File([json], 'kalorientracker-export.json', { type: 'application/json' });
 
