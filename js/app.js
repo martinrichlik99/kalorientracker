@@ -40,13 +40,14 @@
     return d.toISOString().slice(0, 10);
   }
 
-  function header(title, sub) {
+  function header(title, sub, right) {
     return `<header class="sticky top-0 z-30 bg-background/85 backdrop-blur-md">
       <div class="flex justify-between items-center px-container-margin py-4 max-w-max-width mx-auto">
         <div class="flex flex-col">
           <h1 class="text-headline-lg text-primary">${esc(title)}</h1>
           ${sub ? `<p class="text-body-md text-on-surface-variant">${esc(sub)}</p>` : ''}
         </div>
+        ${right || ''}
       </div>
     </header>`;
   }
@@ -121,7 +122,7 @@
       </div>`;
     }).join('');
 
-    return `${header(greeting(), dateLabel(Store.todayStr()))}
+    return `${header(greeting(), dateLabel(Store.todayStr()), `<button id="export-data-top" title="Daten exportieren" class="w-9 h-9 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition shrink-0"><span class="material-symbols-outlined text-[18px]">ios_share</span></button>`)}
     <main class="max-w-max-width mx-auto px-container-margin mt-2 space-y-4">
       <section class="glass-card rounded-2xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30 flex flex-col items-center">
         <div class="relative w-56 h-56 flex items-center justify-center">
@@ -466,6 +467,7 @@
   view.addEventListener('click', (e) => {
     const mealBtn = e.target.closest('.meal-add');
     if (mealBtn) { pendingMeal = mealBtn.dataset.meal; go('search'); }
+    if (e.target.closest('#export-data-top')) { exportForDashboard(); }
     const del = e.target.closest('.del-entry');
     if (del) { Store.removeDiaryEntry(del.dataset.del); render(); }
     const unfav = e.target.closest('.unfav');
