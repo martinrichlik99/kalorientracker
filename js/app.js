@@ -5,6 +5,7 @@
 
   let current = 'dashboard';
   let diaryDate = Store.todayStr();
+  const openMeals = new Set();
 
   // Makro-Konfiguration (Farbe = Mockup-Dashboard)
   const MACROS = [
@@ -94,19 +95,25 @@
     const meals = MEALS.map((m) => {
       const items = s.byMeal[m.key] || [];
       const kcal = items.reduce((a, e) => a + e.calories, 0);
-      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Lebensmittel' : 'Lebensmittel'}` : 'Noch nichts eingetragen';
-      return `<button data-meal="${m.key}" class="meal-add w-full bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between shadow-sm active:scale-[0.99] transition">
-        <div class="flex items-center gap-4">
-          <div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary">
-            <span class="material-symbols-outlined">${m.icon}</span>
-          </div>
-          <div class="text-left">
-            <h3 class="text-label-md text-on-surface">${m.label}</h3>
-            <p class="text-body-md text-on-surface-variant">${sub}</p>
-          </div>
+      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : 'Noch nichts eingetragen';
+      const offen = openMeals.has(m.key) && items.length > 0;
+      const liste = offen ? `<div class="px-4 pb-4 space-y-2">${items.map(entryRowCompact).join('')}</div>` : '';
+      return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between p-4 gap-3">
+          <button data-meal-toggle="${m.key}" class="meal-toggle flex items-center gap-4 flex-1 min-w-0 text-left active:opacity-70 transition">
+            <div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary shrink-0">
+              <span class="material-symbols-outlined">${m.icon}</span>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-label-md text-on-surface">${m.label}</h3>
+              <p class="text-body-md text-on-surface-variant truncate">${sub}</p>
+            </div>
+            ${items.length ? `<span class="material-symbols-outlined text-on-surface-variant transition-transform ${offen ? 'rotate-180' : ''}">expand_more</span>` : ''}
+          </button>
+          <button data-meal="${m.key}" title="${m.label} hinzufügen" class="meal-add w-11 h-11 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg shrink-0 active:scale-90 transition"><span class="material-symbols-outlined">add</span></button>
         </div>
-        <span class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg shrink-0"><span class="material-symbols-outlined">add</span></span>
-      </button>`;
+        ${liste}
+      </div>`;
     }).join('');
 
     const macroBars = MACROS.map((m) => {
@@ -148,6 +155,17 @@
     </main>`;
   }
 
+  function entryRowCompact(e) {
+    const einheit = e.unit === 'piece' ? ' Stk' : e.unit;
+    return `<div data-swipe-del="${e.id}" class="entry-row flex items-center gap-2 bg-surface-container rounded-lg pl-3">
+      <div class="min-w-0 flex-1 py-2">
+        <p class="text-label-md text-on-surface truncate">${esc(e.foodName)}</p>
+        <p class="text-label-sm text-on-surface-variant">${fmt(e.portion)}${einheit} • ${fmt(e.calories)} kcal</p>
+      </div>
+      <button data-del="${e.id}" title="Eintrag löschen" class="del-entry w-11 h-11 flex items-center justify-center text-on-surface-variant active:text-error shrink-0"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+    </div>`;
+  }
+
   function greeting() {
     const h = new Date().getHours();
     if (h < 11) return 'Guten Morgen';
@@ -166,11 +184,11 @@
       const items = s.byMeal[m.key] || [];
       const kcal = items.reduce((a, e) => a + e.calories, 0);
       const rows = items.length
-        ? items.map((e) => `<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col gap-2">
+        ? items.map((e) => `<div data-swipe-del="${e.id}" class="entry-row bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col gap-2">
             <div class="flex justify-between items-start">
               <div><h4 class="text-label-md text-on-surface">${esc(e.foodName)}</h4>
                 <p class="text-label-sm text-on-surface-variant">${fmt(e.portion)}${e.unit === 'piece' ? ' Stk' : e.unit} • ${new Date(e.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</p></div>
-              <button data-del="${e.id}" class="del-entry p-1 text-on-surface-variant active:text-error"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+              <button data-del="${e.id}" title="Eintrag löschen" class="del-entry w-11 h-11 -mt-2 -mr-2 flex items-center justify-center text-on-surface-variant active:text-error shrink-0"><span class="material-symbols-outlined text-[20px]">delete</span></button>
             </div>
             <div class="flex items-end gap-3">
               <span class="text-headline-md text-primary">${fmt(e.calories)} <span class="text-label-sm font-normal text-on-surface-variant">kcal</span></span>
@@ -271,7 +289,6 @@
     if (custom.length) html += section('Eigene Lebensmittel', custom.map(foodRow).join(''));
     if (!html) html = empty('Noch nichts gespeichert', 'Suche ein Lebensmittel oder lege ein eigenes an.');
     box.innerHTML = html;
-    bindFoodRows(box);
   }
 
   async function doSearch(term, box) {
@@ -287,7 +304,6 @@
         box.innerHTML =
           section(`Treffer für „${esc(term)}"`, local.map(foodRow).join('')) +
           `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">Suche weitere Quellen…</p>`;
-        bindFoodRows(box);
       }
 
       const [offResults, usdaResults] = await Promise.allSettled([
@@ -318,7 +334,6 @@
               ? 'OpenFoodFacts nicht erreichbar. Nochmal versuchen oder eigenes Lebensmittel anlegen.'
               : 'Anderen Begriff versuchen oder eigenes Lebensmittel anlegen.'
           );
-      bindFoodRows(box);
     } catch (err) {
       if (err.name === 'AbortError') return;
       box.innerHTML = empty('Offline oder Fehler', 'OpenFoodFacts nicht erreichbar.');
@@ -331,11 +346,7 @@
   function empty(t, s) {
     return `<div class="py-12 text-center text-on-surface-variant"><span class="material-symbols-outlined text-4xl text-outline-variant">inventory_2</span><p class="text-label-md mt-2 text-on-surface">${esc(t)}</p><p class="text-label-sm">${esc(s)}</p></div>`;
   }
-  function bindFoodRows(box) {
-    box.querySelectorAll('.add-food').forEach((b) =>
-      b.addEventListener('click', () => openPortionSheet(JSON.parse(decodeURIComponent(b.dataset.food))))
-    );
-  }
+  // .add-food wird zentral im delegierten view-Listener behandelt (gilt auch für Favoriten)
 
   // ---------- Favoriten ----------
   function renderFavorites() {
@@ -482,7 +493,16 @@
   // Mahlzeit-Schnellwahl aus Dashboard/Tagebuch
   view.addEventListener('click', (e) => {
     const mealBtn = e.target.closest('.meal-add');
-    if (mealBtn) { pendingMeal = mealBtn.dataset.meal; go('search'); }
+    if (mealBtn) { pendingMeal = mealBtn.dataset.meal; go('search'); return; }
+    const toggle = e.target.closest('.meal-toggle');
+    if (toggle) {
+      const key = toggle.dataset.mealToggle;
+      openMeals.has(key) ? openMeals.delete(key) : openMeals.add(key);
+      render();
+      return;
+    }
+    const addFood = e.target.closest('.add-food');
+    if (addFood) { openPortionSheet(JSON.parse(decodeURIComponent(addFood.dataset.food))); return; }
     if (e.target.closest('#export-data-top')) { exportForDashboard(); }
     const del = e.target.closest('.del-entry');
     if (del) { Store.removeDiaryEntry(del.dataset.del); render(); }
@@ -490,6 +510,35 @@
     if (unfav) { const f = Store.getFavorites().find((x) => x.id === unfav.dataset.unfav); if (f) { Store.toggleFavorite(f); render(); } }
     if (e.target.closest('#d-prev')) { diaryDate = shiftDate(diaryDate, -1); render(); }
     if (e.target.closest('#d-next')) { if (diaryDate !== Store.todayStr()) { diaryDate = shiftDate(diaryDate, 1); render(); } }
+  });
+
+  // Nach links wischen löscht einen Eintrag (Tagebuch + aufgeklappte Mahlzeit)
+  let swipe = null;
+  view.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('[data-swipe-del]');
+    if (!row) return;
+    swipe = { row, id: row.dataset.swipeDel, x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, aktiv: false };
+    row.style.transition = '';
+  }, { passive: true });
+  view.addEventListener('touchmove', (e) => {
+    if (!swipe) return;
+    const dx = e.touches[0].clientX - swipe.x;
+    const dy = e.touches[0].clientY - swipe.y;
+    if (!swipe.aktiv && Math.abs(dx) < Math.abs(dy)) { swipe = null; return; }
+    if (dx > 0 && !swipe.aktiv) return;
+    swipe.aktiv = true;
+    swipe.dx = Math.min(0, dx);
+    swipe.row.style.transform = `translateX(${swipe.dx}px)`;
+    swipe.row.style.opacity = String(Math.max(0.4, 1 + swipe.dx / 200));
+  }, { passive: true });
+  view.addEventListener('touchend', () => {
+    if (!swipe) return;
+    const { row, id, dx } = swipe;
+    swipe = null;
+    if (dx < -80) { Store.removeDiaryEntry(id); render(); return; }
+    row.style.transition = 'transform .15s, opacity .15s';
+    row.style.transform = '';
+    row.style.opacity = '';
   });
 
   function openPortionSheet(food) {
