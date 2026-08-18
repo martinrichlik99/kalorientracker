@@ -1,5 +1,5 @@
 // sw.js — App-Shell-Cache, stale-while-revalidate
-const VERSION = 'v1.9';
+const VERSION = 'v1.10';
 const SHELL = 'kt-shell-' + VERSION;
 const SHELL_ASSETS = [
   './',
