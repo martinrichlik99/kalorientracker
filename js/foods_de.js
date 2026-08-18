@@ -244,7 +244,9 @@
     const q = term.toLowerCase().trim();
     const words = q.split(/\s+/);
 
-    const scored = DB.map((f) => {
+    const ALL = DB.concat(window.FOODS_CH || [], window.FOODS_BLS || []);
+
+    const scored = ALL.map((f) => {
       const name = f.name.toLowerCase();
       const tags = f.tags || [];
       let score = 0;
@@ -262,7 +264,7 @@
     })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10)
+      .slice(0, 15)
       .map(({ food: f }) => ({
         id: 'de_' + f.name.toLowerCase().replace(/\s+/g, '_'),
         name: f.name,

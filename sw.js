@@ -1,5 +1,5 @@
 // sw.js — App-Shell-Cache, stale-while-revalidate
-const VERSION = 'v1.5';
+const VERSION = 'v1.6';
 const SHELL = 'kt-shell-' + VERSION;
 const SHELL_ASSETS = [
   './',
@@ -7,6 +7,8 @@ const SHELL_ASSETS = [
   './manifest.json',
   './styles.css',
   './js/store.js',
+  './js/foods_ch.js',
+  './js/foods_bls.js',
   './js/foods_de.js',
   './js/off.js',
   './js/usda.js',

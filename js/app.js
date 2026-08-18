@@ -282,6 +282,13 @@
     try {
         // Lokale DE-Datenbank sofort (synchron)
       const local = FoodsDE.search(term);
+      // Lokale Treffer sofort zeigen — Netzquellen schieben sich danach dazu
+      if (local.length) {
+        box.innerHTML =
+          section(`Treffer für „${esc(term)}"`, local.map(foodRow).join('')) +
+          `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">Suche weitere Quellen…</p>`;
+        bindFoodRows(box);
+      }
 
       const [offResults, usdaResults] = await Promise.allSettled([
         OFF.search(term, sig),
@@ -299,9 +306,18 @@
       const usdaFiltered = usda.filter((f) => !allNames.has(f.name.toLowerCase()));
 
       const list = [...local, ...offFiltered, ...usdaFiltered];
+      const hinweis =
+        offResults.status === 'rejected'
+          ? `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">OpenFoodFacts gerade nicht erreichbar — verpackte Produkte fehlen.</p>`
+          : '';
       box.innerHTML = list.length
-        ? section(`Treffer für „${esc(term)}"`, list.map(foodRow).join(''))
-        : empty('Keine Treffer', 'Anderen Begriff versuchen oder eigenes Lebensmittel anlegen.');
+        ? section(`Treffer für „${esc(term)}"`, list.map(foodRow).join('')) + hinweis
+        : empty(
+            'Keine Treffer',
+            offResults.status === 'rejected'
+              ? 'OpenFoodFacts nicht erreichbar. Nochmal versuchen oder eigenes Lebensmittel anlegen.'
+              : 'Anderen Begriff versuchen oder eigenes Lebensmittel anlegen.'
+          );
       bindFoodRows(box);
     } catch (err) {
       if (err.name === 'AbortError') return;

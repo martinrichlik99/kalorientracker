@@ -27,12 +27,25 @@ function num(v) {
   return Number.isFinite(x) ? Math.round(x * 10) / 10 : 0;
 }
 
+// OFF liefert sporadisch 503 — ein Wiederholversuch fängt die meisten davon ab.
+async function fetchRetry(url, signal) {
+  for (let versuch = 0; versuch < 2; versuch++) {
+    if (versuch) await new Promise((r) => setTimeout(r, 700));
+    try {
+      const res = await fetch(url, { signal });
+      if (res.ok) return res;
+      if (versuch) throw new Error(`OFF Suche fehlgeschlagen: ${res.status}`);
+    } catch (err) {
+      if (err.name === 'AbortError' || versuch) throw err;
+    }
+  }
+}
+
 async function search(term, { signal } = {}) {
   const url =
     `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(term)}` +
     `&search_simple=1&action=process&json=1&page_size=20&fields=${FIELDS}`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`OFF Suche fehlgeschlagen: ${res.status}`);
+  const res = await fetchRetry(url, signal);
   const data = await res.json();
   return (data.products || [])
     .map(mapProduct)
