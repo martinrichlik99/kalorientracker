@@ -357,7 +357,7 @@
       ? `<div class="grid grid-cols-2 gap-4">${favs.map((f) => {
           const data = encodeURIComponent(JSON.stringify(f));
           return `<div class="bg-surface-container-low p-4 rounded-2xl flex flex-col items-center text-center gap-2 border border-outline-variant/10">
-            <button data-unfav="${esc(f.id)}" class="unfav self-end -mt-1 -mr-1 text-secondary"><span class="material-symbols-outlined fill-icon">favorite</span></button>
+            <button data-unfav="${esc(f.id)}" title="Favorit entfernen" class="unfav self-end -mt-2 -mr-2 w-10 h-10 flex items-center justify-center text-secondary active:scale-90 transition"><span class="material-symbols-outlined fill-icon">favorite</span></button>
             <p class="text-label-md text-on-surface truncate w-full">${esc(f.name)}</p>
             <p class="text-label-sm text-outline">${fmt(f.calories)} kcal/100g</p>
             <button class="add-food mt-1 w-full py-2 rounded-full bg-primary text-on-primary text-label-md active:scale-95 transition" data-food="${data}">Hinzufügen</button>
@@ -562,7 +562,7 @@
     openSheet(food.name, `
       <div class="flex items-center justify-between mb-4">
         <p class="text-label-md text-on-surface-variant">${fmt(food.calories)} kcal · E${fmt(food.protein)} K${fmt(food.carbs)} F${fmt(food.fat)} /100${food.unit === 'ml' ? 'ml' : 'g'}</p>
-        <button id="fav-toggle" class="${fav ? 'text-secondary' : 'text-outline-variant'}"><span class="material-symbols-outlined ${fav ? 'fill-icon' : ''}">favorite</span></button>
+        <button id="fav-toggle" title="Als Favorit merken" class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:scale-90 transition ${fav ? 'bg-secondary/10 text-secondary' : 'bg-surface-container text-on-surface-variant'}"><span class="material-symbols-outlined ${fav ? 'fill-icon' : ''}">favorite</span></button>
       </div>
       <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 mb-4">${mealOpts}</div>
       <label class="text-label-md text-on-surface-variant">Menge (${unitLabel})</label>
@@ -600,7 +600,7 @@
         if (!food.id) food.id = Store.uid();
         const now = Store.toggleFavorite(food);
         const btn = ev.currentTarget, ic = btn.querySelector('.material-symbols-outlined');
-        btn.className = now ? 'text-secondary' : 'text-outline-variant';
+        btn.className = `w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:scale-90 transition ${now ? 'bg-secondary/10 text-secondary' : 'bg-surface-container text-on-surface-variant'}`;
         ic.classList.toggle('fill-icon', now);
       });
       root.querySelector('#confirm-add').addEventListener('click', () => {
