@@ -70,7 +70,27 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW:', e));
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        // Update erkennen, OHNE ueber Safari-Adressleiste neu oeffnen zu muessen —
+        // ein Reload innerhalb der Home-Screen-App reicht.
+        const zeigeUpdateBanner = () => {
+          if (document.getElementById('update-banner')) return;
+          const b = document.createElement('div');
+          b.id = 'update-banner';
+          b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:70;background:#006c49;color:#fff;padding:12px 16px;padding-top:max(12px, env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:"Hanken Grotesk",sans-serif;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.15)';
+          b.innerHTML = '<span>Neue Version verfügbar</span><button style="background:#fff;color:#006c49;border:none;border-radius:999px;padding:8px 16px;font-weight:600;font-size:14px">Jetzt laden</button>';
+          b.querySelector('button').addEventListener('click', () => location.reload());
+          document.body.prepend(b);
+        };
+        if (reg.waiting && navigator.serviceWorker.controller) zeigeUpdateBanner();
+        reg.addEventListener('updatefound', () => {
+          const worker = reg.installing;
+          if (!worker) return;
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) zeigeUpdateBanner();
+          });
+        });
+      }).catch((e) => console.warn('SW:', e));
     });
   }
 </script>

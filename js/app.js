@@ -401,6 +401,19 @@
             ${MACROS.map(macroSlider).join('')}</div>
         </div>
       </section>
+      <section class="space-y-2">
+        <h2 class="text-label-md text-on-surface-variant px-1">SICHERUNG</h2>
+        <div class="bg-surface-container-lowest rounded-xl p-4 space-y-3 shadow-sm">
+          <p class="text-label-sm text-on-surface-variant px-1">Alle Daten (Profil, Tagebuch, Favoriten, eigene Lebensmittel) als Datei sichern — vor dem Testen einer neuen Version empfohlen.</p>
+          <button id="backup-save" class="w-full py-3 text-primary font-semibold bg-primary/5 rounded-xl active:scale-[0.98] transition flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">save</span>Vollständige Sicherung erstellen
+          </button>
+          <button id="backup-restore" class="w-full py-3 text-on-surface-variant font-semibold bg-surface-container rounded-xl active:scale-[0.98] transition flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">restore</span>Aus Sicherung wiederherstellen
+          </button>
+          <input id="backup-file" type="file" accept="application/json,.json" class="hidden" />
+        </div>
+      </section>
       <button id="export-data" class="w-full py-3 text-primary font-semibold bg-surface-container-lowest rounded-xl shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-[20px]">ios_share</span>Daten exportieren (Fitness-Dashboard)
       </button>
@@ -424,6 +437,60 @@
       toast('Heutiger Tag zurückgesetzt');
     });
     document.getElementById('export-data').addEventListener('click', exportForDashboard);
+    document.getElementById('backup-save').addEventListener('click', saveFullBackup);
+    document.getElementById('backup-restore').addEventListener('click', () => document.getElementById('backup-file').click());
+    document.getElementById('backup-file').addEventListener('change', (ev) => {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (file) restoreFullBackup(file);
+    });
+  }
+
+  // ---------- Vollstaendige Sicherung / Wiederherstellung ----------
+  async function saveFullBackup() {
+    const payload = Store.exportBackup();
+    const json = JSON.stringify(payload, null, 2);
+    const stamp = Store.todayStr();
+    const file = new File([json], `kalorientracker-backup-${stamp}.json`, { type: 'application/json' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Kalorientracker-Sicherung' });
+        toast('Sicherung geteilt');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Sicherung heruntergeladen');
+  }
+
+  function restoreFullBackup(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(reader.result);
+      } catch {
+        toast('Datei ist keine gültige Sicherung');
+        return;
+      }
+      if (!confirm('Aktuelle Daten mit dieser Sicherung überschreiben?')) return;
+      try {
+        Store.restoreBackup(data);
+        toast('Wiederhergestellt');
+        render();
+      } catch {
+        toast('Sicherung konnte nicht gelesen werden');
+      }
+    };
+    reader.readAsText(file);
   }
 
   // ---------- Export für Fitness-Dashboard ----------

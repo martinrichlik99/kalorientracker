@@ -234,6 +234,25 @@ function round(n) {
   return Math.round((n + Number.EPSILON) * 10) / 10;
 }
 
+// ---------- Vollstaendiges Backup (Schutz vor Speicherverlust) ----------
+function exportBackup() {
+  return {
+    backupVersion: 1,
+    exportedAt: new Date().toISOString(),
+    profile: getProfile(),
+    diary: getDiary(),
+    favorites: getFavorites(),
+    customFoods: getCustomFoods(),
+  };
+}
+function restoreBackup(data) {
+  if (!data || typeof data !== 'object') throw new Error('Ungueltige Sicherungsdatei');
+  if (data.profile) write(LS.profile, data.profile);
+  if (Array.isArray(data.diary)) write(LS.diary, data.diary);
+  if (Array.isArray(data.favorites)) write(LS.favorites, data.favorites);
+  if (Array.isArray(data.customFoods)) write(LS.customFoods, data.customFoods);
+}
+
 window.Store = {
   todayStr,
   uid,
@@ -254,4 +273,6 @@ window.Store = {
   getRecentFoods,
   cacheFood,
   getCachedFood,
+  exportBackup,
+  restoreBackup,
 };
