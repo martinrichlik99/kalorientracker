@@ -6,6 +6,7 @@
   let current = 'dashboard';
   let diaryDate = Store.todayStr();
   const openMeals = new Set();
+  let suppressRowClick = false;
 
   // Makro-Konfiguration (Farbe = Mockup-Dashboard)
   const MACROS = [
@@ -30,6 +31,7 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pct = (v, t) => (t > 0 ? Math.min(100, Math.round((v / t) * 100)) : 0);
+  const round = (n) => Math.round((n + Number.EPSILON) * 10) / 10;
 
   function dateLabel(str) {
     const d = new Date(str + 'T00:00:00');
@@ -89,7 +91,7 @@
     const s = Store.daySummary(Store.todayStr());
     const remaining = p.dailyCalorieTarget - s.calories;
     const ringPct = pct(s.calories, p.dailyCalorieTarget);
-    const C = 2 * Math.PI * 90; // r=90
+    const C = 2 * Math.PI * 64; // r=64 (kleinerer Ring, mehr passt auf den Bildschirm)
     const offset = C - (ringPct / 100) * C;
 
     const meals = MEALS.map((m) => {
@@ -131,25 +133,25 @@
 
     return `${header(greeting(), dateLabel(Store.todayStr()), `<button id="export-data-top" title="Daten exportieren" class="w-9 h-9 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition shrink-0"><span class="material-symbols-outlined text-[18px]">ios_share</span></button>`)}
     <main class="max-w-max-width mx-auto px-container-margin mt-2 space-y-4">
-      <section class="glass-card rounded-2xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30 flex flex-col items-center">
-        <div class="relative w-56 h-56 flex items-center justify-center">
-          <svg class="w-full h-full" viewBox="0 0 224 224">
-            <circle class="text-primary-container/20" cx="112" cy="112" r="90" fill="transparent" stroke="currentColor" stroke-width="12"/>
-            <circle class="text-primary progress-ring-circle" cx="112" cy="112" r="90" fill="transparent" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
+      <section class="glass-card rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30 flex items-center gap-5">
+        <div class="relative w-28 h-28 flex items-center justify-center shrink-0">
+          <svg class="w-full h-full" viewBox="0 0 160 160">
+            <circle class="text-primary-container/20" cx="80" cy="80" r="64" fill="transparent" stroke="currentColor" stroke-width="10"/>
+            <circle class="text-primary progress-ring-circle" cx="80" cy="80" r="64" fill="transparent" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
           </svg>
           <div class="absolute flex flex-col items-center">
-            <span class="text-display text-on-surface">${fmt(Math.max(0, remaining))}</span>
-            <span class="text-label-md text-on-surface-variant uppercase tracking-wider">${remaining < 0 ? 'Überschritten' : 'Verbleibend'}</span>
+            <span class="text-headline-lg text-on-surface">${fmt(Math.max(0, remaining))}</span>
+            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider">${remaining < 0 ? 'Über' : 'Übrig'}</span>
           </div>
         </div>
-        <div class="grid grid-cols-2 w-full mt-6 gap-4 border-t border-outline-variant/20 pt-6">
-          <div class="text-center"><p class="text-label-sm text-on-surface-variant">Gegessen</p><p class="text-headline-md text-on-surface">${fmt(s.calories)}</p></div>
-          <div class="text-center"><p class="text-label-sm text-on-surface-variant">Tagesziel</p><p class="text-headline-md text-on-surface">${fmt(p.dailyCalorieTarget)}</p></div>
+        <div class="grid grid-cols-2 flex-1 gap-3 border-l border-outline-variant/20 pl-5">
+          <div><p class="text-label-sm text-on-surface-variant">Gegessen</p><p class="text-headline-md text-on-surface">${fmt(s.calories)}</p></div>
+          <div><p class="text-label-sm text-on-surface-variant">Tagesziel</p><p class="text-headline-md text-on-surface">${fmt(p.dailyCalorieTarget)}</p></div>
         </div>
       </section>
-      <section class="space-y-3">
-        <h2 class="text-headline-md text-on-surface">Makronährstoffe</h2>
-        <div class="space-y-4 bg-surface-container-lowest p-5 rounded-xl shadow-sm">${macroBars}</div>
+      <section class="space-y-2">
+        <h2 class="text-label-md text-on-surface-variant">Makronährstoffe</h2>
+        <div class="space-y-2 bg-surface-container-lowest p-4 rounded-xl shadow-sm">${macroBars}</div>
       </section>
       <section class="space-y-3 pb-4">${meals}</section>
     </main>`;
@@ -157,7 +159,7 @@
 
   function entryRowCompact(e) {
     const einheit = e.unit === 'piece' ? ' Stk' : e.unit;
-    return `<div data-swipe-del="${e.id}" class="entry-row flex items-center gap-2 bg-surface-container rounded-lg pl-3">
+    return `<div data-swipe-del="${e.id}" data-edit-entry="${e.id}" class="entry-row flex items-center gap-2 bg-surface-container rounded-lg pl-3">
       <div class="min-w-0 flex-1 py-2">
         <p class="text-label-md text-on-surface truncate">${esc(e.foodName)}</p>
         <p class="text-label-sm text-on-surface-variant">${fmt(e.portion)}${einheit} • ${fmt(e.calories)} kcal</p>
@@ -184,7 +186,7 @@
       const items = s.byMeal[m.key] || [];
       const kcal = items.reduce((a, e) => a + e.calories, 0);
       const rows = items.length
-        ? items.map((e) => `<div data-swipe-del="${e.id}" class="entry-row bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col gap-2">
+        ? items.map((e) => `<div data-swipe-del="${e.id}" data-edit-entry="${e.id}" class="entry-row bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col gap-2">
             <div class="flex justify-between items-start">
               <div><h4 class="text-label-md text-on-surface">${esc(e.foodName)}</h4>
                 <p class="text-label-sm text-on-surface-variant">${fmt(e.portion)}${e.unit === 'piece' ? ' Stk' : e.unit} • ${new Date(e.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</p></div>
@@ -503,13 +505,19 @@
     }
     const addFood = e.target.closest('.add-food');
     if (addFood) { openPortionSheet(JSON.parse(decodeURIComponent(addFood.dataset.food))); return; }
-    if (e.target.closest('#export-data-top')) { exportForDashboard(); }
+    if (e.target.closest('#export-data-top')) { exportForDashboard(); return; }
     const del = e.target.closest('.del-entry');
-    if (del) { Store.removeDiaryEntry(del.dataset.del); render(); }
+    if (del) { Store.removeDiaryEntry(del.dataset.del); render(); return; }
     const unfav = e.target.closest('.unfav');
-    if (unfav) { const f = Store.getFavorites().find((x) => x.id === unfav.dataset.unfav); if (f) { Store.toggleFavorite(f); render(); } }
-    if (e.target.closest('#d-prev')) { diaryDate = shiftDate(diaryDate, -1); render(); }
-    if (e.target.closest('#d-next')) { if (diaryDate !== Store.todayStr()) { diaryDate = shiftDate(diaryDate, 1); render(); } }
+    if (unfav) { const f = Store.getFavorites().find((x) => x.id === unfav.dataset.unfav); if (f) { Store.toggleFavorite(f); render(); } return; }
+    if (e.target.closest('#d-prev')) { diaryDate = shiftDate(diaryDate, -1); render(); return; }
+    if (e.target.closest('#d-next')) { if (diaryDate !== Store.todayStr()) { diaryDate = shiftDate(diaryDate, 1); render(); } return; }
+    if (suppressRowClick) { suppressRowClick = false; return; }
+    const entryRow = e.target.closest('.entry-row');
+    if (entryRow && entryRow.dataset.editEntry) {
+      const entry = Store.getDiary().find((x) => x.id === entryRow.dataset.editEntry);
+      if (entry) openEditEntrySheet(entry);
+    }
   });
 
   // Nach links wischen löscht einen Eintrag (Tagebuch + aufgeklappte Mahlzeit)
@@ -536,6 +544,7 @@
     const { row, id, dx } = swipe;
     swipe = null;
     if (dx < -80) { Store.removeDiaryEntry(id); render(); return; }
+    if (dx < -5) suppressRowClick = true; // Wischversuch, danach nicht zusaetzlich das Bearbeiten-Sheet oeffnen
     row.style.transition = 'transform .15s, opacity .15s';
     row.style.transform = '';
     row.style.opacity = '';
@@ -601,6 +610,80 @@
         closeModal();
         toast(`${food.name} hinzugefügt`);
         go('dashboard');
+      });
+    });
+  }
+
+  // ---------- Bestehenden Tagebuch-Eintrag bearbeiten ----------
+  function openEditEntrySheet(entry) {
+    const unitLabel = entry.unit === 'piece' ? 'Stück' : entry.unit;
+    // Naehrwerte je 100g/ml (bzw. je Stueck) aus der gespeicherten Portion zurueckrechnen,
+    // da der Tagebuch-Eintrag nur die berechneten Endwerte speichert.
+    const factorAlt = entry.unit === 'piece' ? entry.portion : entry.portion / 100;
+    const per = {
+      calories: factorAlt ? entry.calories / factorAlt : 0,
+      protein: factorAlt ? entry.protein / factorAlt : 0,
+      carbs: factorAlt ? entry.carbs / factorAlt : 0,
+      fat: factorAlt ? entry.fat / factorAlt : 0,
+    };
+    const mealOpts = MEALS.map((m) => `<button data-m="${m.key}" class="m-opt px-3 py-2 rounded-full text-label-md whitespace-nowrap ${m.key === entry.mealType ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${m.label}</button>`).join('');
+
+    openSheet(entry.foodName, `
+      <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 mb-4">${mealOpts}</div>
+      <label class="text-label-md text-on-surface-variant">Menge (${unitLabel})</label>
+      <div class="flex items-center gap-3 bg-surface-container-low rounded-xl p-4 mt-1">
+        <input id="portion" type="number" inputmode="decimal" step="${entry.unit === 'piece' ? 1 : 10}" value="${entry.portion}" class="flex-1 bg-transparent border-none focus:ring-0 text-headline-md p-0" />
+        <span class="text-on-surface-variant">${unitLabel}</span>
+      </div>
+      <div class="grid grid-cols-4 gap-2 mt-3 mb-5">
+        ${(entry.unit === 'piece' ? [1, 2, 3, 5] : [50, 100, 150, 200]).map((q) => `<button data-q="${q}" class="quick-q py-2 rounded-lg bg-surface-container text-label-md text-on-surface-variant active:scale-95 transition">${q}</button>`).join('')}
+      </div>
+      <div class="flex items-center justify-between bg-primary/5 rounded-xl p-4 mb-4">
+        <span class="text-label-md text-on-surface-variant">Ergibt</span>
+        <span id="calc-kcal" class="text-headline-md text-primary">${fmt(entry.calories)} kcal</span>
+      </div>
+      <div class="flex gap-3">
+        <button id="delete-entry" class="flex-1 py-4 rounded-xl bg-error-container text-on-error-container text-label-md active:scale-95 transition">Löschen</button>
+        <button id="save-entry" class="flex-[2] py-4 rounded-xl bg-primary text-on-primary text-label-md flex items-center justify-center gap-2 active:scale-95 transition shadow-lg">
+          <span class="material-symbols-outlined fill-icon text-[20px]">check_circle</span>Speichern</button>
+      </div>
+    `, (root) => {
+      let selMeal = entry.mealType;
+      const portion = root.querySelector('#portion');
+      const calc = root.querySelector('#calc-kcal');
+      const update = () => {
+        const por = parseFloat(portion.value) || 0;
+        const factor = entry.unit === 'piece' ? por : por / 100;
+        calc.textContent = `${fmt(per.calories * factor)} kcal`;
+      };
+      portion.addEventListener('input', update);
+      root.querySelectorAll('.quick-q').forEach((b) => b.addEventListener('click', () => { portion.value = b.dataset.q; update(); }));
+      root.querySelectorAll('.m-opt').forEach((b) => b.addEventListener('click', () => {
+        selMeal = b.dataset.m;
+        root.querySelectorAll('.m-opt').forEach((x) => { x.classList.remove('bg-primary', 'text-on-primary'); x.classList.add('bg-surface-container', 'text-on-surface-variant'); });
+        b.classList.add('bg-primary', 'text-on-primary'); b.classList.remove('bg-surface-container', 'text-on-surface-variant');
+      }));
+      root.querySelector('#delete-entry').addEventListener('click', () => {
+        Store.removeDiaryEntry(entry.id);
+        closeModal();
+        toast(`${entry.foodName} gelöscht`);
+        render();
+      });
+      root.querySelector('#save-entry').addEventListener('click', () => {
+        const por = parseFloat(portion.value);
+        if (!por || por <= 0) { toast('Menge eingeben'); return; }
+        const factor = entry.unit === 'piece' ? por : por / 100;
+        Store.updateDiaryEntry(entry.id, {
+          portion: por,
+          mealType: selMeal,
+          calories: round(per.calories * factor),
+          protein: round(per.protein * factor),
+          carbs: round(per.carbs * factor),
+          fat: round(per.fat * factor),
+        });
+        closeModal();
+        toast('Gespeichert');
+        render();
       });
     });
   }
