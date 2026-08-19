@@ -268,6 +268,7 @@
 
   function foodRow(food) {
     const data = encodeURIComponent(JSON.stringify(food));
+    const fav = Store.isFavorite(food.id);
     return `<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex items-center justify-between">
       <div class="flex-1 min-w-0 pr-3">
         <p class="text-label-md text-on-surface truncate">${esc(food.name)}</p>
@@ -276,8 +277,12 @@
           <span class="text-label-sm text-on-surface-variant">E${fmt(food.protein)} K${fmt(food.carbs)} F${fmt(food.fat)}</span>
         </div>
       </div>
-      <button class="add-food w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center active:scale-90 transition shrink-0" data-food="${data}">
-        <span class="material-symbols-outlined">add</span></button>
+      <div class="flex items-center gap-1 shrink-0">
+        <button class="row-fav w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition ${fav ? 'text-secondary' : 'text-on-surface-variant'}" data-fav-food="${data}" title="Als Favorit merken">
+          <span class="material-symbols-outlined ${fav ? 'fill-icon' : ''}">favorite</span></button>
+        <button class="add-food w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center active:scale-90 transition shrink-0" data-food="${data}">
+          <span class="material-symbols-outlined">add</span></button>
+      </div>
     </div>`;
   }
 
@@ -572,6 +577,15 @@
     }
     const addFood = e.target.closest('.add-food');
     if (addFood) { openPortionSheet(JSON.parse(decodeURIComponent(addFood.dataset.food))); return; }
+    const rowFav = e.target.closest('.row-fav');
+    if (rowFav) {
+      const food = JSON.parse(decodeURIComponent(rowFav.dataset.favFood));
+      Store.toggleFavorite(food);
+      const nowFav = Store.isFavorite(food.id);
+      rowFav.className = `row-fav w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition ${nowFav ? 'text-secondary' : 'text-on-surface-variant'}`;
+      rowFav.querySelector('.material-symbols-outlined').className = `material-symbols-outlined ${nowFav ? 'fill-icon' : ''}`;
+      return;
+    }
     if (e.target.closest('#export-data-top')) { exportForDashboard(); return; }
     const del = e.target.closest('.del-entry');
     if (del) { Store.removeDiaryEntry(del.dataset.del); render(); return; }
