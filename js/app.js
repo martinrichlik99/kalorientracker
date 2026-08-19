@@ -880,5 +880,9 @@
   }
 
   // ---------- Start ----------
-  go('dashboard');
+  (async () => {
+    const restored = await Store.autoRecoverIfEmpty();
+    go('dashboard');
+    if (restored) toast('Daten automatisch wiederhergestellt');
+  })();
 })();

@@ -28,8 +28,11 @@ function read(key, fallback) {
     return fallback;
   }
 }
+let snapshotT;
 function write(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+  clearTimeout(snapshotT);
+  snapshotT = setTimeout(saveAutoSnapshot, 500);
 }
 
 function uid() {
@@ -194,11 +197,14 @@ let _db = null;
 function openDB() {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('kt-foods', 1);
+    const req = indexedDB.open('kt-foods', 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('foodCache')) {
         db.createObjectStore('foodCache', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('autoBackup')) {
+        db.createObjectStore('autoBackup', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => {
@@ -253,6 +259,37 @@ function restoreBackup(data) {
   if (Array.isArray(data.customFoods)) write(LS.customFoods, data.customFoods);
 }
 
+// ---------- Automatischer Hintergrund-Snapshot (IndexedDB, unabhaengig von localStorage) ----------
+// Schutz gegen iOS-Speicherverlust bei App-Updates: localStorage kann verschwinden,
+// IndexedDB ist ein separater Speicherbereich und ueberlebt das haeufiger.
+async function saveAutoSnapshot() {
+  try {
+    const db = await openDB();
+    db.transaction('autoBackup', 'readwrite').objectStore('autoBackup').put({ id: 'latest', ...exportBackup() });
+  } catch {
+    /* Snapshot optional */
+  }
+}
+async function getAutoSnapshot() {
+  try {
+    const db = await openDB();
+    return await new Promise((resolve) => {
+      const req = db.transaction('autoBackup').objectStore('autoBackup').get('latest');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+async function autoRecoverIfEmpty() {
+  if (localStorage.getItem(LS.profile) || localStorage.getItem(LS.diary)) return false;
+  const snap = await getAutoSnapshot();
+  if (!snap || (!snap.profile && (!snap.diary || !snap.diary.length))) return false;
+  restoreBackup(snap);
+  return true;
+}
+
 window.Store = {
   todayStr,
   uid,
@@ -275,4 +312,6 @@ window.Store = {
   getCachedFood,
   exportBackup,
   restoreBackup,
+  autoRecoverIfEmpty,
+  saveAutoSnapshot,
 };
