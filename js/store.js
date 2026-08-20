@@ -40,7 +40,8 @@ function uid() {
 }
 
 function todayStr(d = new Date()) {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`; // YYYY-MM-DD, lokale Zeitzone (toISOString wäre UTC und driftet abends/morgens einen Tag)
 }
 
 // ---------- Profil ----------

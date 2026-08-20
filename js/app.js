@@ -40,7 +40,7 @@
   function shiftDate(str, days) {
     const d = new Date(str + 'T00:00:00');
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    return Store.todayStr(d);
   }
 
   function header(title, sub, right) {
@@ -708,8 +708,13 @@
       fat: factorAlt ? entry.fat / factorAlt : 0,
     };
     const mealOpts = MEALS.map((m) => `<button data-m="${m.key}" class="m-opt px-3 py-2 rounded-full text-label-md whitespace-nowrap ${m.key === entry.mealType ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${m.label}</button>`).join('');
+    const fav = Store.isFavorite(entry.foodId);
 
     openSheet(entry.foodName, `
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-label-md text-on-surface-variant">${fmt(per.calories)} kcal · E${fmt(per.protein)} K${fmt(per.carbs)} F${fmt(per.fat)} /${entry.unit === 'piece' ? 'Stk' : entry.unit === 'ml' ? '100ml' : '100g'}</p>
+        <button id="fav-toggle" title="Als Favorit merken" class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:scale-90 transition ${fav ? 'bg-secondary/10 text-secondary' : 'bg-surface-container text-on-surface-variant'}"><span class="material-symbols-outlined ${fav ? 'fill-icon' : ''}">favorite</span></button>
+      </div>
       <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 mb-4">${mealOpts}</div>
       <label class="text-label-md text-on-surface-variant">Menge (${unitLabel})</label>
       <div class="flex items-center gap-3 bg-surface-container-low rounded-xl p-4 mt-1">
@@ -744,6 +749,13 @@
         root.querySelectorAll('.m-opt').forEach((x) => { x.classList.remove('bg-primary', 'text-on-primary'); x.classList.add('bg-surface-container', 'text-on-surface-variant'); });
         b.classList.add('bg-primary', 'text-on-primary'); b.classList.remove('bg-surface-container', 'text-on-surface-variant');
       }));
+      root.querySelector('#fav-toggle').addEventListener('click', (ev) => {
+        const food = { id: entry.foodId, name: entry.foodName, calories: per.calories, protein: per.protein, carbs: per.carbs, fat: per.fat, unit: entry.unit, barcode: null, source: 'custom' };
+        const now = Store.toggleFavorite(food);
+        const btn = ev.currentTarget, ic = btn.querySelector('.material-symbols-outlined');
+        btn.className = `w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:scale-90 transition ${now ? 'bg-secondary/10 text-secondary' : 'bg-surface-container text-on-surface-variant'}`;
+        ic.classList.toggle('fill-icon', now);
+      });
       root.querySelector('#delete-entry').addEventListener('click', () => {
         Store.removeDiaryEntry(entry.id);
         closeModal();
