@@ -12,12 +12,20 @@ const LS = {
 const DEFAULT_PROFILE = {
   weight: 78.5,
   height: 182,
+  age: 30,
+  sex: 'male', // male | female — für Grundumsatz-Formel
   activityLevel: 'moderate', // sedentary | light | moderate | active | very_active
+  goal: 'lose', // lose | maintain | gain
+  pace: 'steady', // gentle | steady | aggressive
+  targetWeight: null, // kg, optional
   dailyCalorieTarget: 2200,
   proteinTarget: 120,
   carbsTarget: 240,
   fatTarget: 70,
 };
+
+const ACTIVITY_FACTOR = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
+const KCAL_PER_KG = 7700;
 
 // ---------- localStorage Helfer ----------
 function read(key, fallback) {
@@ -241,6 +249,52 @@ function round(n) {
   return Math.round((n + Number.EPSILON) * 10) / 10;
 }
 
+// ---------- Ziel-Rechner (Mifflin-St-Jeor) ----------
+function calcTargets(p = getProfile()) {
+  const bmr = p.sex === 'female'
+    ? 10 * p.weight + 6.25 * p.height - 5 * p.age - 161
+    : 10 * p.weight + 6.25 * p.height - 5 * p.age + 5;
+  const tdee = bmr * (ACTIVITY_FACTOR[p.activityLevel] || ACTIVITY_FACTOR.moderate);
+
+  let dailyCalorieTarget;
+  if (p.goal === 'lose') {
+    const paceFactor = { gentle: 0.005, steady: 0.0075, aggressive: 0.01 }[p.pace] ?? 0.0075;
+    const deficit = (p.weight * paceFactor * KCAL_PER_KG) / 7;
+    const floor = p.sex === 'female' ? 1200 : 1500;
+    dailyCalorieTarget = Math.max(tdee - deficit, floor);
+  } else if (p.goal === 'gain') {
+    const surplus = { gentle: 250, steady: 325, aggressive: 400 }[p.pace] ?? 325;
+    dailyCalorieTarget = tdee + surplus;
+  } else {
+    dailyCalorieTarget = tdee;
+  }
+  dailyCalorieTarget = Math.round(dailyCalorieTarget / 10) * 10;
+
+  const proteinPerKg = p.goal === 'lose' || p.activityLevel === 'very_active' ? 2.2 : 1.8;
+  const proteinTarget = Math.round(p.weight * proteinPerKg);
+  const fatTarget = Math.round(p.weight * 0.8);
+  const carbsTarget = Math.max(0, Math.round((dailyCalorieTarget - proteinTarget * 4 - fatTarget * 9) / 4));
+  const waterTarget = round((p.weight * 32.5) / 1000);
+
+  let weeks = null;
+  if ((p.goal === 'lose' || p.goal === 'gain') && p.targetWeight) {
+    const weeklyChangeKg = ((tdee - dailyCalorieTarget) * 7) / KCAL_PER_KG;
+    const diffKg = Math.abs(p.weight - p.targetWeight);
+    if (weeklyChangeKg !== 0) weeks = Math.round(diffKg / Math.abs(weeklyChangeKg));
+  }
+
+  return {
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    dailyCalorieTarget,
+    proteinTarget,
+    carbsTarget,
+    fatTarget,
+    waterTarget,
+    weeks,
+  };
+}
+
 // ---------- Vollstaendiges Backup (Schutz vor Speicherverlust) ----------
 function exportBackup() {
   return {
@@ -296,6 +350,7 @@ window.Store = {
   uid,
   getProfile,
   saveProfile,
+  calcTargets,
   getDiary,
   getDiaryByDate,
   addDiaryEntry,

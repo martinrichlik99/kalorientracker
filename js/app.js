@@ -24,6 +24,9 @@
     sedentary: 'Sitzend', light: 'Leicht', moderate: 'Moderat',
     active: 'Aktiv', very_active: 'Sehr aktiv',
   };
+  const SEX = { male: 'Männlich', female: 'Weiblich' };
+  const GOAL = { lose: 'Abnehmen', maintain: 'Halten', gain: 'Zunehmen' };
+  const PACE = { gentle: 'Sanft', steady: 'Stetig', aggressive: 'Aggressiv' };
 
   // ---------- Helfer ----------
   const fmt = (n) => new Intl.NumberFormat('de-DE').format(Math.round(n));
@@ -390,12 +393,25 @@
         <div class="bg-surface-container-lowest rounded-xl overflow-hidden divide-y divide-outline-variant/20 shadow-sm">
           ${row('scale', 'Körpergewicht', fmtDec(p.weight) + ' kg', 'weight', 'bg-primary')}
           ${row('height', 'Größe', fmt(p.height) + ' cm', 'height', 'bg-tertiary')}
+          ${row('cake', 'Alter', fmt(p.age) + ' Jahre', 'age', 'bg-tertiary')}
+          ${row('person', 'Biologisches Geschlecht', SEX[p.sex], 'sex', 'bg-secondary')}
           ${row('fitness_center', 'Aktivitätslevel', ACTIVITY[p.activityLevel], 'activityLevel', 'bg-secondary')}
+        </div>
+      </section>
+      <section class="space-y-2">
+        <h2 class="text-label-md text-on-surface-variant px-1">ZIEL</h2>
+        <div class="bg-surface-container-lowest rounded-xl overflow-hidden divide-y divide-outline-variant/20 shadow-sm">
+          ${row('flag', 'Ziel', GOAL[p.goal], 'goal', 'bg-primary')}
+          ${row('speed', 'Tempo', PACE[p.pace], 'pace', 'bg-secondary')}
+          ${row('target', 'Zielgewicht', p.targetWeight != null ? fmtDec(p.targetWeight) + ' kg' : '– (optional)', 'targetWeight', 'bg-tertiary')}
         </div>
       </section>
       <section class="space-y-2">
         <h2 class="text-label-md text-on-surface-variant px-1">ERNÄHRUNGSZIELE</h2>
         <div class="bg-surface-container-lowest rounded-xl p-5 space-y-6 shadow-sm">
+          <button id="calc-open" class="w-full py-3 text-primary font-semibold bg-primary/5 rounded-xl active:scale-[0.98] transition flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">calculate</span>Ziele berechnen
+          </button>
           <div class="space-y-3">
             <div class="flex justify-between items-center"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary">local_fire_department</span><span class="text-body-md font-semibold">Tägliches Kalorienziel</span></div>
               <div class="bg-primary-container/20 px-3 py-1 rounded-full"><span class="text-label-md text-on-primary-container" id="kcal-val">${fmt(p.dailyCalorieTarget)} kcal</span></div></div>
@@ -436,6 +452,7 @@
     document.querySelectorAll('.edit-field').forEach((b) =>
       b.addEventListener('click', () => editProfileField(b.dataset.edit))
     );
+    document.getElementById('calc-open').addEventListener('click', openGoalCalculator);
     document.getElementById('reset-day').addEventListener('click', () => {
       if (!confirm('Alle heutigen Einträge löschen?')) return;
       Store.getDiaryByDate(Store.todayStr()).forEach((e) => Store.removeDiaryEntry(e.id));
@@ -535,22 +552,63 @@
 
   function editProfileField(field) {
     const p = Store.getProfile();
-    if (field === 'activityLevel') {
-      const keys = Object.keys(ACTIVITY);
-      const opts = keys.map((k) => `<button data-val="${k}" class="opt w-full text-left p-4 rounded-xl ${k === p.activityLevel ? 'bg-primary-container/15 text-primary font-semibold' : 'bg-surface-container-low'}">${ACTIVITY[k]}</button>`).join('');
-      openSheet('Aktivitätslevel', `<div class="space-y-2">${opts}</div>`, (root) => {
-        root.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => { Store.saveProfile({ activityLevel: b.dataset.val }); closeModal(); render(); }));
+    const choiceMaps = { activityLevel: ACTIVITY, sex: SEX, goal: GOAL, pace: PACE };
+    if (choiceMaps[field]) {
+      const map = choiceMaps[field];
+      const titles = { activityLevel: 'Aktivitätslevel', sex: 'Biologisches Geschlecht', goal: 'Ziel', pace: 'Tempo' };
+      const opts = Object.keys(map).map((k) => `<button data-val="${k}" class="opt w-full text-left p-4 rounded-xl ${k === p[field] ? 'bg-primary-container/15 text-primary font-semibold' : 'bg-surface-container-low'}">${map[k]}</button>`).join('');
+      openSheet(titles[field], `<div class="space-y-2">${opts}</div>`, (root) => {
+        root.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => { Store.saveProfile({ [field]: b.dataset.val }); closeModal(); render(); }));
       });
       return;
     }
-    const cfg = { weight: ['Körpergewicht', 'kg', 0.1], height: ['Größe', 'cm', 1] }[field];
+    const numCfg = {
+      weight: ['Körpergewicht', 'kg', 0.1],
+      height: ['Größe', 'cm', 1],
+      age: ['Alter', 'Jahre', 1],
+      targetWeight: ['Zielgewicht', 'kg', 0.1],
+    };
+    const cfg = numCfg[field];
+    const optional = field === 'targetWeight';
     openSheet(cfg[0], `<div class="flex items-center gap-3 bg-surface-container-low rounded-xl p-4">
-      <input id="pf-input" type="number" step="${cfg[2]}" value="${p[field]}" class="flex-1 bg-transparent border-none focus:ring-0 text-headline-md p-0" />
+      <input id="pf-input" type="number" step="${cfg[2]}" value="${p[field] ?? ''}" placeholder="${optional ? 'optional' : ''}" class="flex-1 bg-transparent border-none focus:ring-0 text-headline-md p-0" />
       <span class="text-on-surface-variant text-body-md">${cfg[1]}</span></div>
       <button id="pf-save" class="mt-4 w-full py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Speichern</button>`, (root) => {
       root.querySelector('#pf-save').addEventListener('click', () => {
-        const val = parseFloat(root.querySelector('#pf-input').value);
+        const raw = root.querySelector('#pf-input').value.trim();
+        if (optional && raw === '') { Store.saveProfile({ [field]: null }); closeModal(); render(); return; }
+        const val = parseFloat(raw);
         if (Number.isFinite(val)) { Store.saveProfile({ [field]: val }); closeModal(); render(); }
+      });
+    });
+  }
+
+  function openGoalCalculator() {
+    const p = Store.getProfile();
+    const r = Store.calcTargets(p);
+    openSheet('Ziele berechnen', `<div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-surface-container-low rounded-xl p-3"><p class="text-label-sm text-on-surface-variant">Grundumsatz</p><p class="text-headline-sm text-on-surface">${fmt(r.bmr)} kcal</p></div>
+        <div class="bg-surface-container-low rounded-xl p-3"><p class="text-label-sm text-on-surface-variant">Gesamtumsatz</p><p class="text-headline-sm text-on-surface">${fmt(r.tdee)} kcal</p></div>
+      </div>
+      <div class="bg-primary-container/15 rounded-xl p-4 text-center">
+        <p class="text-label-sm text-on-surface-variant">Tägliches Kalorienziel</p>
+        <p class="text-headline-lg text-primary">${fmt(r.dailyCalorieTarget)} kcal</p>
+      </div>
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div><p class="text-label-sm text-primary font-semibold">Protein</p><p class="text-body-md">${fmt(r.proteinTarget)} g</p></div>
+        <div><p class="text-label-sm text-secondary font-semibold">Kohlenhydrate</p><p class="text-body-md">${fmt(r.carbsTarget)} g</p></div>
+        <div><p class="text-label-sm text-tertiary font-semibold">Fett</p><p class="text-body-md">${fmt(r.fatTarget)} g</p></div>
+      </div>
+      <p class="text-body-md text-on-surface-variant text-center">Wasserziel: ${fmtDec(r.waterTarget)} L/Tag</p>
+      ${r.weeks != null ? `<p class="text-body-md text-on-surface-variant text-center">Geschätzter Zeitrahmen: ~${r.weeks} Wochen</p>` : ''}
+      <div class="h-px bg-outline-variant/20"></div>
+      <p class="text-label-sm text-on-surface-variant">METHODIK: Grundumsatz nach Mifflin-St-Jeor, Gesamtumsatz über Standard-Aktivitätsfaktoren (1,2–1,9), Proteinziel 1,8–2,2 g/kg, Fettziel 0,8 g/kg, Wasserziel 30–35 ml/kg, Zeitrahmen über 7.700 kcal/kg. Allgemeine Orientierung, keine medizinische Beratung.</p>
+      <button id="calc-apply" class="w-full py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Übernehmen</button>
+    </div>`, (root) => {
+      root.querySelector('#calc-apply').addEventListener('click', () => {
+        Store.saveProfile({ dailyCalorieTarget: r.dailyCalorieTarget, proteinTarget: r.proteinTarget, carbsTarget: r.carbsTarget, fatTarget: r.fatTarget });
+        closeModal(); render(); toast('Ziele übernommen');
       });
     });
   }
