@@ -96,11 +96,17 @@
     const ringPct = pct(s.calories, p.dailyCalorieTarget);
     const C = 2 * Math.PI * 64; // r=64 (kleinerer Ring, mehr passt auf den Bildschirm)
     const offset = C - (ringPct / 100) * C;
+    const yesterday = Store.daySummary(shiftDate(Store.todayStr(), -1)).byMeal;
 
     const meals = MEALS.map((m) => {
       const items = s.byMeal[m.key] || [];
       const kcal = items.reduce((a, e) => a + e.calories, 0);
-      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : 'Noch nichts eingetragen';
+      const yItems = items.length ? [] : yesterday[m.key];
+      const yKcal = yItems.reduce((a, e) => a + e.calories, 0);
+      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : yItems.length ? `Gestern ${fmt(yKcal)} kcal` : 'Noch nichts eingetragen';
+      const copyBtn = yItems.length
+        ? `<button data-copy-meal="${m.key}" title="${m.label} von gestern übernehmen" aria-label="${m.label} von gestern übernehmen" class="meal-copy w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 active:scale-90 transition"><span class="material-symbols-outlined">history</span></button>`
+        : '';
       const offen = openMeals.has(m.key) && items.length > 0;
       const liste = offen ? `<div class="px-4 pb-4 space-y-2">${items.map(entryRowCompact).join('')}</div>` : '';
       return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
@@ -111,10 +117,11 @@
             </div>
             <div class="min-w-0">
               <h3 class="text-label-md text-on-surface">${m.label}</h3>
-              <p class="text-body-md text-on-surface-variant truncate">${sub}</p>
+              <p class="text-body-md text-on-surface-variant">${sub}</p>
             </div>
             ${items.length ? `<span class="material-symbols-outlined text-on-surface-variant transition-transform ${offen ? 'rotate-180' : ''}">expand_more</span>` : ''}
           </button>
+          ${copyBtn}
           <button data-meal="${m.key}" title="${m.label} hinzufügen" class="meal-add w-11 h-11 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg shrink-0 active:scale-90 transition"><span class="material-symbols-outlined">add</span></button>
         </div>
         ${liste}
@@ -156,8 +163,37 @@
         <h2 class="text-label-md text-on-surface-variant">Makronährstoffe</h2>
         <div class="space-y-2 bg-surface-container-lowest p-4 rounded-xl shadow-sm">${macroBars}</div>
       </section>
-      <section class="space-y-3 pb-4">${meals}</section>
+      <section class="space-y-3">${meals}</section>
+      ${weekCard(p.dailyCalorieTarget)}
     </main>`;
+  }
+
+  function weekCard(target) {
+    const today = Store.todayStr();
+    const days = Store.weekSummary(today);
+    const max = Math.max(target * 1.25, ...days.map((d) => d.calories));
+    const logged = days.filter((d) => d.count && d.date !== today); // heute ist noch nicht vorbei
+    const avg = logged.length ? logged.reduce((a, d) => a + d.calories, 0) / logged.length : 0;
+    const inTarget = logged.filter((d) => d.calories <= target).length;
+    const wd = new Intl.DateTimeFormat('de-DE', { weekday: 'short' });
+    const targetPos = Math.round((target / max) * 100);
+    const bars = days.map((d) => {
+      const over = d.calories > target;
+      return `<button data-week-day="${d.date}" aria-label="${dateLabel(d.date)}: ${fmt(d.calories)} kcal" class="week-day flex-1 flex flex-col items-center gap-1 active:opacity-70">
+        <div class="relative w-full h-20 flex items-end justify-center">
+          <div class="absolute inset-x-0 border-t border-dashed border-outline-variant" style="bottom:${targetPos}%"></div>
+          <div class="relative w-5 rounded-t-md ${over ? 'bg-error' : 'bg-primary'}" style="height:${Math.round((d.calories / max) * 100)}%"></div>
+        </div>
+        <span class="text-label-sm ${d.date === today ? 'text-primary font-bold' : 'text-on-surface-variant'}">${wd.format(new Date(d.date + 'T00:00:00')).replace('.', '')}</span>
+      </button>`;
+    }).join('');
+    return `<section class="space-y-2 pb-4">
+      <div class="flex justify-between items-baseline">
+        <h2 class="text-label-md text-on-surface-variant">Diese Woche</h2>
+        <span class="text-label-sm text-on-surface-variant">${logged.length ? `Ø ${fmt(avg)} kcal · ${inTarget}/${logged.length} Tage im Ziel` : 'Noch keine vollen Tage'}</span>
+      </div>
+      <div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex">${bars}</div>
+    </section>`;
   }
 
   function entryRowCompact(e) {
@@ -239,13 +275,16 @@
         <input id="q" type="text" inputmode="search" placeholder="Lebensmittel suchen..." class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0 placeholder:text-outline-variant" />
         <button id="scan-btn" class="material-symbols-outlined text-outline ml-3 active:text-primary">photo_camera</button>
       </div>
-      <div class="grid grid-cols-2 gap-4">
-        <button id="scan-tile" class="bg-primary-container/10 p-4 rounded-xl flex items-center justify-between active:scale-95 transition">
-          <div class="text-left"><p class="text-label-md text-primary">Scan</p><p class="text-label-sm text-on-surface-variant">Barcode</p></div>
-          <span class="material-symbols-outlined text-primary text-3xl">barcode_scanner</span></button>
-        <button id="custom-tile" class="bg-secondary-container/10 p-4 rounded-xl flex items-center justify-between active:scale-95 transition">
-          <div class="text-left"><p class="text-label-md text-secondary">Eigenes</p><p class="text-label-sm text-on-surface-variant">Lebensmittel</p></div>
-          <span class="material-symbols-outlined text-secondary text-3xl">add_circle</span></button>
+      <div class="grid grid-cols-3 gap-3">
+        <button id="scan-tile" class="bg-primary-container/10 p-3 rounded-xl flex flex-col items-start gap-1 active:scale-95 transition">
+          <span class="material-symbols-outlined text-primary text-3xl">barcode_scanner</span>
+          <div class="text-left"><p class="text-label-md text-primary">Scan</p><p class="text-label-sm text-on-surface-variant">Barcode</p></div></button>
+        <button id="custom-tile" class="bg-secondary-container/10 p-3 rounded-xl flex flex-col items-start gap-1 active:scale-95 transition">
+          <span class="material-symbols-outlined text-secondary text-3xl">add_circle</span>
+          <div class="text-left"><p class="text-label-md text-secondary">Eigenes</p><p class="text-label-sm text-on-surface-variant">Lebensmittel</p></div></button>
+        <button id="recipe-tile" class="bg-tertiary-container/10 p-3 rounded-xl flex flex-col items-start gap-1 active:scale-95 transition">
+          <span class="material-symbols-outlined text-tertiary text-3xl">skillet</span>
+          <div class="text-left"><p class="text-label-md text-tertiary">Rezept</p><p class="text-label-sm text-on-surface-variant">Zutaten</p></div></button>
       </div>
       <div id="results"></div>
     </main>`;
@@ -256,7 +295,8 @@
     const results = document.getElementById('results');
     document.getElementById('scan-btn').addEventListener('click', openScanner);
     document.getElementById('scan-tile').addEventListener('click', openScanner);
-    document.getElementById('custom-tile').addEventListener('click', openCustomFood);
+    document.getElementById('custom-tile').addEventListener('click', () => openCustomFood());
+    document.getElementById('recipe-tile').addEventListener('click', () => openRecipe());
 
     renderSuggestions(results);
 
@@ -269,18 +309,20 @@
     });
   }
 
-  function foodRow(food) {
+  function foodRow(food, editable = false) {
     const data = encodeURIComponent(JSON.stringify(food));
     const fav = Store.isFavorite(food.id);
     return `<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex items-center justify-between">
       <div class="flex-1 min-w-0 pr-3">
-        <p class="text-label-md text-on-surface truncate">${esc(food.name)}</p>
+        <p class="text-label-md text-on-surface truncate">${food.recipe ? '<span class="material-symbols-outlined text-[16px] text-tertiary align-[-3px] mr-1">skillet</span>' : ''}${esc(food.name)}</p>
         <div class="flex items-center gap-2 mt-0.5 flex-wrap">
           <span class="text-label-sm text-primary font-bold">${fmt(food.calories)} kcal<span class="text-outline font-normal">/100${food.unit === 'ml' ? 'ml' : 'g'}</span></span>
           <span class="text-label-sm text-on-surface-variant">E${fmt(food.protein)} K${fmt(food.carbs)} F${fmt(food.fat)}</span>
+          ${food.serving && food.source === 'custom' ? `<span class="text-label-sm text-outline">1 Port. = ${fmt(food.serving)} g</span>` : ''}
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        ${editable ? `<button class="edit-custom w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant active:scale-90 transition" data-edit-custom="${esc(food.id)}" title="Bearbeiten"><span class="material-symbols-outlined text-[20px]">edit</span></button>` : ''}
         <button class="row-fav w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition ${fav ? 'text-secondary' : 'text-on-surface-variant'}" data-fav-food="${data}" title="Als Favorit merken">
           <span class="material-symbols-outlined ${fav ? 'fill-icon' : ''}">favorite</span></button>
         <button class="add-food w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center active:scale-90 transition shrink-0" data-food="${data}">
@@ -294,9 +336,9 @@
     const favs = Store.getFavorites();
     const custom = Store.getCustomFoods();
     let html = '';
-    if (favs.length) html += section('Favoriten', favs.map(foodRow).join(''));
-    if (recent.length) html += section('Zuletzt verwendet', recent.map(foodRow).join(''));
-    if (custom.length) html += section('Eigene Lebensmittel', custom.map(foodRow).join(''));
+    if (favs.length) html += section('Favoriten', favs.map((f) => foodRow(f)).join(''));
+    if (recent.length) html += section('Zuletzt verwendet', recent.map((f) => foodRow(f)).join(''));
+    if (custom.length) html += section('Eigene Lebensmittel & Rezepte', custom.map((f) => foodRow(f, true)).join(''));
     if (!html) html = empty('Noch nichts gespeichert', 'Suche ein Lebensmittel oder lege ein eigenes an.');
     box.innerHTML = html;
   }
@@ -312,7 +354,7 @@
       // Lokale Treffer sofort zeigen — Netzquellen schieben sich danach dazu
       if (local.length) {
         box.innerHTML =
-          section(`Treffer für „${esc(term)}"`, local.map(foodRow).join('')) +
+          section(`Treffer für „${esc(term)}"`, local.map((f) => foodRow(f)).join('')) +
           `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">Suche weitere Quellen…</p>`;
       }
 
@@ -337,7 +379,7 @@
           ? `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">OpenFoodFacts gerade nicht erreichbar — verpackte Produkte fehlen.</p>`
           : '';
       box.innerHTML = list.length
-        ? section(`Treffer für „${esc(term)}"`, list.map(foodRow).join('')) + hinweis
+        ? section(`Treffer für „${esc(term)}"`, list.map((f) => foodRow(f)).join('')) + hinweis
         : empty(
             'Keine Treffer',
             offResults.status === 'rejected'
@@ -367,7 +409,7 @@
           return `<div class="bg-surface-container-low p-4 rounded-2xl flex flex-col items-center text-center gap-2 border border-outline-variant/10">
             <button data-unfav="${esc(f.id)}" title="Favorit entfernen" class="unfav self-end -mt-2 -mr-2 w-10 h-10 flex items-center justify-center text-secondary active:scale-90 transition"><span class="material-symbols-outlined fill-icon">favorite</span></button>
             <p class="text-label-md text-on-surface truncate w-full">${esc(f.name)}</p>
-            <p class="text-label-sm text-outline">${fmt(f.calories)} kcal/100g</p>
+            <p class="text-label-sm text-outline">${fmt(f.calories)} kcal/100${f.unit === 'ml' ? 'ml' : 'g'}</p>
             <button class="add-food mt-1 w-full py-2 rounded-full bg-primary text-on-primary text-label-md active:scale-95 transition" data-food="${data}">Hinzufügen</button>
           </div>`;
         }).join('')}</div>`
@@ -433,6 +475,8 @@
             <span class="material-symbols-outlined text-[20px]">restore</span>Aus Sicherung wiederherstellen
           </button>
           <input id="backup-file" type="file" accept="application/json,.json" class="hidden" />
+          <p class="text-label-sm text-on-surface-variant px-1 pt-2">Automatische Sicherungen (je Tag, letzte 7) — Antippen holt den Stand zurück:</p>
+          <div id="snap-list" class="space-y-2"></div>
         </div>
       </section>
       <button id="export-data" class="w-full py-3 text-primary font-semibold bg-surface-container-lowest rounded-xl shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-2">
@@ -466,6 +510,24 @@
       ev.target.value = '';
       if (file) restoreFullBackup(file);
     });
+    renderSnapshots();
+  }
+
+  async function renderSnapshots() {
+    const list = await Store.listSnapshots();
+    const box = document.getElementById('snap-list');
+    if (!box) return;
+    const when = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const label = (s) => (s.id === 'before-restore' ? 'Vor letzter Wiederherstellung' : when.format(new Date(s.exportedAt)));
+    box.innerHTML = list.length
+      ? list.map((s) => `<button data-snap="${esc(s.id)}" data-label="${esc(label(s))}" class="snap w-full flex justify-between items-center p-3 rounded-lg bg-surface-container-low text-left active:scale-[0.99] transition">
+          <span class="text-label-md">${esc(label(s))}</span><span class="text-label-sm text-on-surface-variant">${s.entries} ${s.entries === 1 ? 'Eintrag' : 'Einträge'}</span></button>`).join('')
+      : '<p class="text-label-sm text-outline px-1">Noch keine vorhanden.</p>';
+    box.querySelectorAll('.snap').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm(`Stand „${b.dataset.label}" zurückholen? Der aktuelle Stand wird vorher gesichert.`)) return;
+      if (await Store.restoreSnapshot(b.dataset.snap)) { toast('Stand zurückgeholt'); render(); }
+      else toast('Sicherung nicht lesbar');
+    }));
   }
 
   // ---------- Vollstaendige Sicherung / Wiederherstellung ----------
@@ -626,6 +688,23 @@
   view.addEventListener('click', (e) => {
     const mealBtn = e.target.closest('.meal-add');
     if (mealBtn) { pendingMeal = mealBtn.dataset.meal; go('search'); return; }
+    const copyBtn = e.target.closest('.meal-copy');
+    if (copyBtn) {
+      const today = Store.todayStr();
+      Store.copyMeal(shiftDate(today, -1), copyBtn.dataset.copyMeal, today);
+      openMeals.add(copyBtn.dataset.copyMeal);
+      render();
+      toast(`${MEALS.find((m) => m.key === copyBtn.dataset.copyMeal).label} von gestern übernommen`);
+      return;
+    }
+    const weekDay = e.target.closest('.week-day');
+    if (weekDay) { diaryDate = weekDay.dataset.weekDay; go('diary'); return; }
+    const editCustom = e.target.closest('.edit-custom');
+    if (editCustom) {
+      const f = Store.getCustomFoods().find((x) => x.id === editCustom.dataset.editCustom);
+      if (f) f.recipe ? openRecipe(f) : openCustomFood(f, true);
+      return;
+    }
     const toggle = e.target.closest('.meal-toggle');
     if (toggle) {
       const key = toggle.dataset.mealToggle;
@@ -693,8 +772,13 @@
     const meal = pendingMeal || defaultMeal();
     pendingMeal = null;
     const unitLabel = food.unit === 'ml' ? 'ml' : food.unit === 'piece' ? 'Stück' : 'g';
-    const start = food.portion || 100;
+    const start = food.portion || food.serving || 100;
     const fav = food.id ? Store.isFavorite(food.id) : false;
+    const quick = food.unit === 'piece'
+      ? [1, 2, 3, 5].map((q) => ({ q, label: q }))
+      : food.serving
+        ? [[0.5, '½'], [1, '1'], [2, '2']].map(([n, l]) => ({ q: round(n * food.serving), label: `${l} Port.<br><span class="text-label-sm text-outline">${fmt(n * food.serving)} ${food.unit === 'ml' ? 'ml' : 'g'}</span>` })).concat({ q: 100, label: '100' })
+        : [50, 100, 150, 200].map((q) => ({ q, label: q }));
 
     const mealOpts = MEALS.map((m) => `<button data-m="${m.key}" class="m-opt px-3 py-2 rounded-full text-label-md whitespace-nowrap ${m.key === meal ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${m.label}</button>`).join('');
 
@@ -710,7 +794,7 @@
         <span class="text-on-surface-variant">${unitLabel}</span>
       </div>
       <div class="grid grid-cols-4 gap-2 mt-3 mb-5">
-        ${(food.unit === 'piece' ? [1, 2, 3, 5] : [50, 100, 150, 200]).map((q) => `<button data-q="${q}" class="quick-q py-2 rounded-lg bg-surface-container text-label-md text-on-surface-variant active:scale-95 transition">${q}</button>`).join('')}
+        ${quick.map(({ q, label }) => `<button data-q="${q}" class="quick-q py-2 rounded-lg bg-surface-container text-label-md text-on-surface-variant leading-tight active:scale-95 transition">${label}</button>`).join('')}
       </div>
       <div class="flex items-center justify-between bg-primary/5 rounded-xl p-4 mb-4">
         <span class="text-label-md text-on-surface-variant">Ergibt</span>
@@ -840,42 +924,169 @@
   }
 
   // ---------- Eigenes Lebensmittel ----------
-  function openCustomFood(prefill = {}) {
+  function openCustomFood(prefill = {}, edit = false) {
     const barcode = prefill.barcode || null;
-    const f = (id, label, unit) => `<div class="flex items-center justify-between bg-surface-container-low rounded-xl p-3">
-      <label class="text-body-md">${label}</label>
-      <div class="flex items-center gap-2"><input id="cf-${id}" type="number" inputmode="decimal" class="w-24 bg-transparent border-none focus:ring-0 text-right text-label-md p-0" placeholder="0" /><span class="text-on-surface-variant text-label-sm w-6">${unit}</span></div></div>`;
-    const hint = barcode
+    const f = (id, label, unit, ph = '0') => `<div class="flex items-center justify-between bg-surface-container-low rounded-xl p-3">
+      <label for="cf-${id}" class="text-body-md">${label}</label>
+      <div class="flex items-center gap-2"><input id="cf-${id}" type="number" inputmode="decimal" value="${prefill[id] ?? ''}" class="w-24 bg-transparent border-none focus:ring-0 text-right text-label-md p-0" placeholder="${ph}" /><span class="text-on-surface-variant text-label-sm w-6">${unit}</span></div></div>`;
+    const hint = barcode && !edit
       ? `<div class="bg-secondary-container/10 rounded-xl p-3 mb-3 flex items-start gap-2">
            <span class="material-symbols-outlined text-primary text-[20px]">info</span>
            <p class="text-label-sm text-on-surface-variant">Barcode <span class="font-semibold">${esc(barcode)}</span> nicht in OpenFoodFacts. Einmal selbst anlegen — beim nächsten Scan ist er sofort da.</p>
          </div>`
       : '';
-    openSheet('Eigenes Lebensmittel', `
+    openSheet(edit ? 'Lebensmittel bearbeiten' : 'Eigenes Lebensmittel', `
       ${hint}
-      <div class="bg-surface-container-low rounded-xl p-3 mb-3"><input id="cf-name" type="text" placeholder="Name" value="${esc(prefill.name || '')}" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" /></div>
+      <div class="bg-surface-container-low rounded-xl p-3 mb-3"><input id="cf-name" type="text" placeholder="Name" aria-label="Name" value="${esc(prefill.name || '')}" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" /></div>
       <p class="text-label-sm text-on-surface-variant mb-2 px-1">Werte pro 100 g</p>
       <div class="space-y-2">
         ${f('calories', 'Kalorien', 'kcal')}${f('protein', 'Eiweiß', 'g')}${f('carbs', 'Kohlenhydrate', 'g')}${f('fat', 'Fett', 'g')}
+        ${f('serving', 'Portion/Stück wiegt', 'g', 'optional')}
       </div>
-      <button id="cf-save" class="mt-5 w-full py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Anlegen & hinzufügen</button>
+      ${edit
+        ? `<div class="flex gap-3 mt-5">
+            <button id="cf-delete" class="flex-1 py-4 rounded-xl bg-error-container text-on-error-container text-label-md active:scale-95 transition">Löschen</button>
+            <button id="cf-save" class="flex-[2] py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Speichern</button></div>`
+        : `<button id="cf-save" class="mt-5 w-full py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Anlegen & hinzufügen</button>`}
     `, (root) => {
+      root.querySelector('#cf-delete')?.addEventListener('click', () => {
+        if (!confirm(`„${prefill.name}" löschen? Tagebuch-Einträge bleiben erhalten.`)) return;
+        Store.removeCustomFood(prefill.id);
+        closeModal(); render(); toast('Gelöscht');
+      });
       root.querySelector('#cf-save').addEventListener('click', () => {
         const name = root.querySelector('#cf-name').value.trim();
         if (!name) { toast('Name eingeben'); return; }
-        const food = Store.addCustomFood({
-          // Bei Barcode: id = barcode → off.js findet ihn beim nächsten Scan im Cache
-          id: barcode || undefined,
-          barcode,
-          name, unit: 'g',
+        const values = {
+          name,
           calories: +root.querySelector('#cf-calories').value || 0,
           protein: +root.querySelector('#cf-protein').value || 0,
           carbs: +root.querySelector('#cf-carbs').value || 0,
           fat: +root.querySelector('#cf-fat').value || 0,
+          serving: +root.querySelector('#cf-serving').value || null,
+        };
+        if (edit) {
+          Store.updateCustomFood(prefill.id, values);
+          closeModal(); render(); toast('Gespeichert');
+          return;
+        }
+        const food = Store.addCustomFood({
+          // Bei Barcode: id = barcode → off.js findet ihn beim nächsten Scan im Cache
+          id: barcode || undefined,
+          barcode,
+          unit: 'g',
+          ...values,
         });
         if (barcode) Store.cacheFood(food); // unter Barcode cachen für künftige Scans
         closeModal();
         openPortionSheet(food);
+      });
+    });
+  }
+
+  // ---------- Rezept (Zutaten → eigenes Lebensmittel mit Werten pro 100 g + Portionsgewicht) ----------
+  function openRecipe(existing = null) {
+    const ings = existing ? existing.recipe.ingredients.map((i) => ({ ...i })) : [];
+    let found = [];
+    openSheet(existing ? 'Rezept bearbeiten' : 'Neues Rezept', `
+      <div class="bg-surface-container-low rounded-xl p-3 mb-3"><input id="rz-name" type="text" placeholder="Name, z. B. Bolognese" aria-label="Name" value="${esc(existing?.name || '')}" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" /></div>
+      <div class="flex items-center justify-between bg-surface-container-low rounded-xl p-3 mb-4">
+        <label for="rz-portions" class="text-body-md">Ergibt Portionen</label>
+        <input id="rz-portions" type="number" inputmode="numeric" min="1" value="${existing?.recipe.portions || 1}" class="w-16 bg-transparent border-none focus:ring-0 text-right text-label-md p-0" />
+      </div>
+      <p class="text-label-md text-on-surface-variant mb-2 px-1">Zutaten</p>
+      <div id="rz-list" class="space-y-2 mb-3"></div>
+      <div class="flex items-center bg-surface-container-lowest rounded-xl p-3 border border-outline-variant/30 focus-within:ring-2 ring-primary">
+        <span class="material-symbols-outlined text-outline mr-2">search</span>
+        <input id="rz-q" type="text" inputmode="search" placeholder="Zutat suchen…" aria-label="Zutat suchen" class="w-full bg-transparent border-none focus:ring-0 text-body-md p-0" />
+      </div>
+      <div id="rz-res" class="space-y-1 mt-2"></div>
+      <div id="rz-sum" class="bg-primary/5 rounded-xl p-4 my-4 text-label-md text-on-surface-variant"></div>
+      ${existing
+        ? `<div class="flex gap-3">
+            <button id="rz-delete" class="flex-1 py-4 rounded-xl bg-error-container text-on-error-container text-label-md active:scale-95 transition">Löschen</button>
+            <button id="rz-save" class="flex-[2] py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Speichern</button></div>`
+        : `<button id="rz-save" class="w-full py-4 rounded-xl bg-primary text-on-primary text-label-md active:scale-95 transition">Rezept speichern</button>`}
+    `, (root) => {
+      const list = root.querySelector('#rz-list'), res = root.querySelector('#rz-res');
+      const sum = root.querySelector('#rz-sum'), portionsIn = root.querySelector('#rz-portions');
+      const totals = () => {
+        const t = { grams: 0, calories: 0, protein: 0, carbs: 0, fat: 0 };
+        for (const i of ings) {
+          t.grams += i.grams;
+          for (const k of ['calories', 'protein', 'carbs', 'fat']) t[k] += (i[k] * i.grams) / 100;
+        }
+        return t;
+      };
+      const updateSum = () => {
+        const t = totals(), portions = Math.max(1, parseInt(portionsIn.value) || 1);
+        sum.innerHTML = ings.length
+          ? `Gesamt ${fmt(t.grams)} g · ${fmt(t.calories)} kcal<br><span class="text-primary font-bold">Pro Portion ${fmt(t.grams / portions)} g · ${fmt(t.calories / portions)} kcal</span>`
+          : 'Noch keine Zutaten';
+      };
+      const renderList = () => {
+        list.innerHTML = ings.map((i, n) => `<div class="flex items-center gap-2 bg-surface-container rounded-lg pl-3">
+          <p class="flex-1 min-w-0 text-label-md truncate">${esc(i.name)}</p>
+          <input data-i="${n}" type="number" inputmode="decimal" value="${i.grams}" aria-label="Menge ${esc(i.name)} in Gramm" class="rz-g w-16 bg-transparent border-none focus:ring-0 text-right text-label-md p-0" />
+          <span class="text-label-sm text-on-surface-variant">g</span>
+          <button data-i="${n}" title="Zutat entfernen" class="rz-x w-11 h-11 flex items-center justify-center text-on-surface-variant active:text-error"><span class="material-symbols-outlined text-[20px]">close</span></button>
+        </div>`).join('');
+        updateSum();
+      };
+      renderList();
+      portionsIn.addEventListener('input', updateSum);
+      list.addEventListener('input', (e) => {
+        if (!e.target.classList.contains('rz-g')) return;
+        ings[e.target.dataset.i].grams = parseFloat(e.target.value) || 0;
+        updateSum();
+      });
+      list.addEventListener('click', (e) => {
+        const x = e.target.closest('.rz-x');
+        if (x) { ings.splice(x.dataset.i, 1); renderList(); }
+      });
+      let t;
+      const q = root.querySelector('#rz-q');
+      q.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          const term = q.value.trim().toLowerCase();
+          if (term.length < 2) { res.innerHTML = ''; return; }
+          const own = Store.getCustomFoods().filter((f) => f.id !== existing?.id && f.name.toLowerCase().includes(term));
+          found = own.concat(FoodsDE.search(term)).slice(0, 8);
+          res.innerHTML = found.length
+            ? found.map((f, n) => `<button data-i="${n}" class="rz-add w-full flex justify-between items-center text-left p-3 rounded-lg bg-surface-container-low active:scale-[0.99] transition">
+                <span class="text-label-md truncate pr-2">${esc(f.name)}</span><span class="text-label-sm text-on-surface-variant shrink-0">${fmt(f.calories)} kcal/100g</span></button>`).join('')
+            : '<p class="text-label-sm text-on-surface-variant px-1">Nichts gefunden — erst als eigenes Lebensmittel anlegen.</p>';
+        }, 200);
+      });
+      res.addEventListener('click', (e) => {
+        const b = e.target.closest('.rz-add');
+        if (!b) return;
+        const f = found[b.dataset.i];
+        ings.push({ name: f.name, grams: f.serving || 100, calories: f.calories, protein: f.protein, carbs: f.carbs, fat: f.fat });
+        q.value = ''; res.innerHTML = '';
+        renderList();
+      });
+      root.querySelector('#rz-delete')?.addEventListener('click', () => {
+        if (!confirm(`Rezept „${existing.name}" löschen? Tagebuch-Einträge bleiben erhalten.`)) return;
+        Store.removeCustomFood(existing.id);
+        closeModal(); render(); toast('Rezept gelöscht');
+      });
+      root.querySelector('#rz-save').addEventListener('click', () => {
+        const name = root.querySelector('#rz-name').value.trim();
+        const tot = totals(), portions = Math.max(1, parseInt(portionsIn.value) || 1);
+        if (!name) { toast('Name eingeben'); return; }
+        if (!ings.length || tot.grams <= 0) { toast('Zutaten mit Menge eingeben'); return; }
+        const per100 = (v) => round((v / tot.grams) * 100);
+        const values = {
+          name, unit: 'g',
+          calories: per100(tot.calories), protein: per100(tot.protein), carbs: per100(tot.carbs), fat: per100(tot.fat),
+          serving: Math.round(tot.grams / portions),
+          recipe: { portions, ingredients: ings.filter((i) => i.grams > 0) },
+        };
+        if (existing) Store.updateCustomFood(existing.id, values);
+        else Store.addCustomFood(values);
+        closeModal(); render(); toast(existing ? 'Rezept gespeichert' : 'Rezept angelegt');
       });
     });
   }
@@ -948,6 +1159,16 @@
     t.textContent = msg; t.style.opacity = '1';
     toastT = setTimeout(() => { t.style.opacity = '0'; }, 1800);
   }
+
+  // App über Mitternacht offen/im Hintergrund → beim Zurückkommen auf den neuen Tag springen
+  let shownDay = Store.todayStr();
+  document.addEventListener('visibilitychange', () => {
+    const today = Store.todayStr();
+    if (document.hidden || today === shownDay) return;
+    if (diaryDate === shownDay) diaryDate = today;
+    shownDay = today;
+    render();
+  });
 
   // ---------- Start ----------
   (async () => {

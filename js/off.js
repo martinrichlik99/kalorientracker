@@ -16,6 +16,7 @@ function mapProduct(p) {
     carbs: num(n.carbohydrates_100g),
     fat: num(n.fat_100g),
     portion: num(p.serving_quantity) || 100,
+    serving: num(p.serving_quantity) || null,
     unit: 'g',
     barcode: p.code || null,
     source: 'openfoodfacts',
@@ -57,7 +58,8 @@ async function byBarcode(code) {
   const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`OFF Barcode HTTP ${res.status}`);
+    // OFF meldet unbekannte Barcodes seit 2026 mit HTTP 404 (Body status:0) — das ist "nicht gefunden", kein Netzfehler
+    if (!res.ok && res.status !== 404) throw new Error(`OFF Barcode HTTP ${res.status}`);
     const data = await res.json();
     if (data.status !== 1 || !data.product) {
       const cached = await Store.getCachedFood(code);

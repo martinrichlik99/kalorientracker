@@ -119,6 +119,28 @@ function daySummary(date = todayStr()) {
     byMeal: groupByMeal(entries),
   };
 }
+function weekSummary(end = todayStr()) {
+  const days = [];
+  const d = new Date(end + 'T00:00:00');
+  d.setDate(d.getDate() - 6);
+  for (let i = 0; i < 7; i++) {
+    const date = todayStr(d);
+    const entries = getDiaryByDate(date);
+    days.push({ date, calories: Math.round(entries.reduce((a, e) => a + e.calories, 0)), count: entries.length });
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+function copyMeal(fromDate, mealType, toDate) {
+  const src = getDiaryByDate(fromDate).filter((e) => e.mealType === mealType);
+  const now = Date.now();
+  const diary = getDiary();
+  src.forEach((e, i) => diary.push({ ...e, id: uid(), date: toDate, timestamp: now + i }));
+  write(LS.diary, diary);
+  return src.length;
+}
+
 function groupByMeal(entries) {
   const meals = { breakfast: [], lunch: [], dinner: [], snack: [] };
   for (const e of entries) (meals[e.mealType] || meals.snack).push(e);
@@ -170,6 +192,19 @@ function addCustomFood(food) {
   list.push(f);
   write(LS.customFoods, list);
   return f;
+}
+function updateCustomFood(id, patch) {
+  let updated = null;
+  write(LS.customFoods, getCustomFoods().map((f) => (f.id === id ? (updated = { ...f, ...patch }) : f)));
+  if (!updated) return null;
+  const favs = getFavorites();
+  if (favs.some((f) => f.id === id)) write(LS.favorites, favs.map((f) => (f.id === id ? updated : f)));
+  if (updated.barcode) cacheFood(updated);
+  return updated;
+}
+function removeCustomFood(id) {
+  write(LS.customFoods, getCustomFoods().filter((f) => f.id !== id));
+  write(LS.favorites, getFavorites().filter((f) => f.id !== id));
 }
 
 // ---------- Zuletzt verwendet (aus Tagebuch abgeleitet) ----------
@@ -317,25 +352,68 @@ function restoreBackup(data) {
 // ---------- Automatischer Hintergrund-Snapshot (IndexedDB, unabhaengig von localStorage) ----------
 // Schutz gegen iOS-Speicherverlust bei App-Updates: localStorage kann verschwinden,
 // IndexedDB ist ein separater Speicherbereich und ueberlebt das haeufiger.
+// Zusaetzlich ein Snapshot je Kalendertag (letzte 7): 'latest' allein wird bei teilweisem
+// Verlust binnen 500 ms mit dem kaputten Stand ueberschrieben, die Vortage bleiben.
+const DAY_SNAPSHOTS = 7;
 async function saveAutoSnapshot() {
   try {
     const db = await openDB();
-    db.transaction('autoBackup', 'readwrite').objectStore('autoBackup').put({ id: 'latest', ...exportBackup() });
+    const data = exportBackup();
+    const store = db.transaction('autoBackup', 'readwrite').objectStore('autoBackup');
+    store.put({ id: 'latest', ...data });
+    store.put({ id: 'day-' + todayStr(), ...data });
+    store.getAllKeys().onsuccess = (ev) => {
+      ev.target.result
+        .filter((k) => k.startsWith('day-'))
+        .sort()
+        .slice(0, -DAY_SNAPSHOTS)
+        .forEach((k) => store.delete(k));
+    };
   } catch {
     /* Snapshot optional */
   }
 }
-async function getAutoSnapshot() {
+async function getAutoSnapshot(id = 'latest') {
   try {
     const db = await openDB();
     return await new Promise((resolve) => {
-      const req = db.transaction('autoBackup').objectStore('autoBackup').get('latest');
+      const req = db.transaction('autoBackup').objectStore('autoBackup').get(id);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => resolve(null);
     });
   } catch {
     return null;
   }
+}
+async function listSnapshots() {
+  try {
+    const db = await openDB();
+    const all = await new Promise((resolve) => {
+      const req = db.transaction('autoBackup').objectStore('autoBackup').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+    return all
+      .filter((s) => s.id !== 'latest')
+      .map((s) => ({ id: s.id, exportedAt: s.exportedAt, entries: (s.diary || []).length }))
+      .sort((a, b) => b.exportedAt.localeCompare(a.exportedAt));
+  } catch {
+    return [];
+  }
+}
+// Vor dem Zurueckholen den aktuellen Stand sichern — sonst ueberschreibt der Restore
+// sofort den heutigen Tages-Snapshot und ein Fehlgriff waere nicht mehr umkehrbar.
+async function restoreSnapshot(id) {
+  const snap = await getAutoSnapshot(id);
+  if (!snap) return false;
+  const db = await openDB();
+  await new Promise((resolve) => {
+    const tx = db.transaction('autoBackup', 'readwrite');
+    tx.objectStore('autoBackup').put({ ...exportBackup(), id: 'before-restore' });
+    tx.oncomplete = tx.onerror = resolve;
+  });
+  restoreBackup(snap);
+  return true;
 }
 async function autoRecoverIfEmpty() {
   if (localStorage.getItem(LS.profile) || localStorage.getItem(LS.diary)) return false;
@@ -357,12 +435,16 @@ window.Store = {
   removeDiaryEntry,
   updateDiaryEntry,
   daySummary,
+  weekSummary,
+  copyMeal,
   getAllDaySummaries,
   getFavorites,
   isFavorite,
   toggleFavorite,
   getCustomFoods,
   addCustomFood,
+  updateCustomFood,
+  removeCustomFood,
   getRecentFoods,
   cacheFood,
   getCachedFood,
@@ -370,4 +452,6 @@ window.Store = {
   restoreBackup,
   autoRecoverIfEmpty,
   saveAutoSnapshot,
+  listSnapshots,
+  restoreSnapshot,
 };
