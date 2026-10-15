@@ -5,6 +5,8 @@
 
   let current = 'dashboard';
   let diaryDate = Store.todayStr();
+  let dashDate = Store.todayStr();
+  let addDate = null;
   const openMeals = new Set();
   let suppressRowClick = false;
 
@@ -78,7 +80,10 @@
     });
   }
   document.querySelectorAll('.nav-btn').forEach((b) =>
-    b.addEventListener('click', () => go(b.dataset.nav))
+    b.addEventListener('click', () => {
+      if (b.dataset.nav === 'dashboard') dashDate = Store.todayStr();
+      go(b.dataset.nav);
+    })
   );
 
   function render() {
@@ -89,23 +94,46 @@
   }
 
   // ---------- Dashboard ----------
+  function weekOf(str) {
+    const off = (new Date(str + 'T00:00:00').getDay() + 6) % 7;
+    return Array.from({ length: 7 }, (_, i) => shiftDate(str, i - off));
+  }
+
+  function dayStrip() {
+    const today = Store.todayStr();
+    const wd = new Intl.DateTimeFormat('de-DE', { weekday: 'short' });
+    const days = weekOf(dashDate);
+    const arrow = (id, icon, label, off) => `<button id="${id}" aria-label="${label}" ${off ? 'disabled' : ''} class="w-9 h-11 flex items-center justify-center rounded-full text-on-surface-variant active:scale-90 transition shrink-0 ${off ? 'opacity-30' : ''}"><span class="material-symbols-outlined">${icon}</span></button>`;
+    const cells = days.map((d) => {
+      const future = d > today, sel = d === dashDate;
+      const has = Store.getDiaryByDate(d).length > 0;
+      return `<button data-dash-day="${d}" ${future ? 'disabled' : ''} aria-label="${dateLabel(d)}" aria-pressed="${sel}" class="dash-day flex-1 min-w-0 flex flex-col items-center py-1.5 rounded-xl active:scale-95 transition ${sel ? 'bg-primary text-on-primary' : 'text-on-surface-variant'} ${future ? 'opacity-40' : ''}">
+        <span class="text-label-sm">${wd.format(new Date(d + 'T00:00:00')).replace('.', '')}</span>
+        <span class="text-label-md ${sel ? '' : 'text-on-surface'}">${Number(d.slice(8))}</span>
+        <span class="w-1 h-1 rounded-full mt-1 ${has ? (sel ? 'bg-on-primary' : 'bg-primary') : 'bg-transparent'}"></span>
+      </button>`;
+    }).join('');
+    return `<nav aria-label="Tag wählen" class="flex items-center">${arrow('dash-prev', 'chevron_left', 'Vorherige Woche', false)}<div class="flex flex-1 gap-0.5 min-w-0">${cells}</div>${arrow('dash-next', 'chevron_right', 'Nächste Woche', days[6] >= today)}</nav>`;
+  }
+
   function renderDashboard() {
     const p = Store.getProfile();
-    const s = Store.daySummary(Store.todayStr());
+    const isToday = dashDate === Store.todayStr();
+    const s = Store.daySummary(dashDate);
     const remaining = p.dailyCalorieTarget - s.calories;
+    const over = remaining < 0;
     const ringPct = pct(s.calories, p.dailyCalorieTarget);
-    const C = 2 * Math.PI * 64; // r=64 (kleinerer Ring, mehr passt auf den Bildschirm)
-    const offset = C - (ringPct / 100) * C;
-    const yesterday = Store.daySummary(shiftDate(Store.todayStr(), -1)).byMeal;
+    const vor = isToday ? 'Gestern' : 'Vortag';
+    const yesterday = Store.daySummary(shiftDate(dashDate, -1)).byMeal;
 
     const meals = MEALS.map((m) => {
       const items = s.byMeal[m.key] || [];
       const kcal = items.reduce((a, e) => a + e.calories, 0);
       const yItems = items.length ? [] : yesterday[m.key];
       const yKcal = yItems.reduce((a, e) => a + e.calories, 0);
-      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : yItems.length ? `Gestern ${fmt(yKcal)} kcal` : 'Noch nichts eingetragen';
+      const sub = items.length ? `${fmt(kcal)} kcal • ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : yItems.length ? `${vor} ${fmt(yKcal)} kcal` : 'Noch nichts eingetragen';
       const copyBtn = yItems.length
-        ? `<button data-copy-meal="${m.key}" title="${m.label} von gestern übernehmen" aria-label="${m.label} von gestern übernehmen" class="meal-copy w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 active:scale-90 transition"><span class="material-symbols-outlined">history</span></button>`
+        ? `<button data-copy-meal="${m.key}" title="${m.label} vom Vortag übernehmen" aria-label="${m.label} vom Vortag übernehmen" class="meal-copy w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 active:scale-90 transition"><span class="material-symbols-outlined">history</span></button>`
         : '';
       const offen = openMeals.has(m.key) && items.length > 0;
       const liste = offen ? `<div class="px-4 pb-4 space-y-2">${items.map(entryRowCompact).join('')}</div>` : '';
@@ -141,23 +169,19 @@
       </div>`;
     }).join('');
 
-    return `${header(greeting(), dateLabel(Store.todayStr()), `<button id="export-data-top" title="Daten exportieren" class="w-9 h-9 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition shrink-0"><span class="material-symbols-outlined text-[18px]">ios_share</span></button>`)}
+    return `${header(greeting(), dateLabel(dashDate), `<button id="export-data-top" title="Daten exportieren" class="w-9 h-9 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition shrink-0"><span class="material-symbols-outlined text-[18px]">ios_share</span></button>`)}
     <main class="max-w-max-width mx-auto px-container-margin mt-2 space-y-4">
-      <section class="glass-card rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30 flex items-center gap-5">
-        <div class="relative w-28 h-28 flex items-center justify-center shrink-0">
-          <svg class="w-full h-full" viewBox="0 0 160 160">
-            <circle class="text-primary-container/20" cx="80" cy="80" r="64" fill="transparent" stroke="currentColor" stroke-width="10"/>
-            <circle class="text-primary progress-ring-circle" cx="80" cy="80" r="64" fill="transparent" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
-          </svg>
-          <div class="absolute flex flex-col items-center">
-            <span class="text-headline-lg text-on-surface">${fmt(Math.max(0, remaining))}</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider">${remaining < 0 ? 'Über' : 'Übrig'}</span>
-          </div>
+      ${dayStrip()}
+      <section class="glass-card rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30">
+        <p class="text-label-sm text-on-surface-variant mb-2">Kalorien übrig${isToday ? ' · Heute' : ''}</p>
+        <div class="flex items-center text-center">
+          <div class="flex-1"><p class="text-headline-md text-on-surface">${fmt(p.dailyCalorieTarget)}</p><p class="text-label-sm text-on-surface-variant">Ziel</p></div>
+          <span class="text-on-surface-variant" aria-hidden="true">−</span>
+          <div class="flex-1"><p class="text-headline-md text-on-surface">${fmt(s.calories)}</p><p class="text-label-sm text-on-surface-variant">Gegessen</p></div>
+          <span class="text-on-surface-variant" aria-hidden="true">=</span>
+          <div class="flex-1"><p class="text-headline-md ${over ? 'text-error' : 'text-primary'}">${fmt(remaining)}</p><p class="text-label-sm text-on-surface-variant">Übrig</p></div>
         </div>
-        <div class="grid grid-cols-2 flex-1 gap-3 border-l border-outline-variant/20 pl-5">
-          <div><p class="text-label-sm text-on-surface-variant">Gegessen</p><p class="text-headline-md text-on-surface">${fmt(s.calories)}</p></div>
-          <div><p class="text-label-sm text-on-surface-variant">Tagesziel</p><p class="text-headline-md text-on-surface">${fmt(p.dailyCalorieTarget)}</p></div>
-        </div>
+        <div class="w-full bg-surface-container rounded-full h-2 mt-3"><div class="${over ? 'bg-error' : 'bg-primary'} h-2 rounded-full transition-all" style="width:${ringPct}%"></div></div>
       </section>
       <section class="space-y-2">
         <h2 class="text-label-md text-on-surface-variant">Makronährstoffe</h2>
@@ -687,16 +711,19 @@
   // Mahlzeit-Schnellwahl aus Dashboard/Tagebuch
   view.addEventListener('click', (e) => {
     const mealBtn = e.target.closest('.meal-add');
-    if (mealBtn) { pendingMeal = mealBtn.dataset.meal; go('search'); return; }
+    if (mealBtn) { pendingMeal = mealBtn.dataset.meal; addDate = current === 'diary' ? diaryDate : dashDate; go('search'); return; }
     const copyBtn = e.target.closest('.meal-copy');
     if (copyBtn) {
-      const today = Store.todayStr();
-      Store.copyMeal(shiftDate(today, -1), copyBtn.dataset.copyMeal, today);
+      Store.copyMeal(shiftDate(dashDate, -1), copyBtn.dataset.copyMeal, dashDate);
       openMeals.add(copyBtn.dataset.copyMeal);
       render();
-      toast(`${MEALS.find((m) => m.key === copyBtn.dataset.copyMeal).label} von gestern übernommen`);
+      toast(`${MEALS.find((m) => m.key === copyBtn.dataset.copyMeal).label} vom Vortag übernommen`);
       return;
     }
+    const dashDay = e.target.closest('.dash-day');
+    if (dashDay) { dashDate = dashDay.dataset.dashDay; render(); return; }
+    if (e.target.closest('#dash-prev')) { dashDate = shiftDate(dashDate, -7); render(); return; }
+    if (e.target.closest('#dash-next')) { dashDate = weekOf(dashDate)[6] >= Store.todayStr() ? dashDate : shiftDate(dashDate, 7); render(); return; }
     const weekDay = e.target.closest('.week-day');
     if (weekDay) { diaryDate = weekDay.dataset.weekDay; go('diary'); return; }
     const editCustom = e.target.closest('.edit-custom');
@@ -771,6 +798,8 @@
   function openPortionSheet(food) {
     const meal = pendingMeal || defaultMeal();
     pendingMeal = null;
+    const day = addDate || Store.todayStr();
+    addDate = null;
     const unitLabel = food.unit === 'ml' ? 'ml' : food.unit === 'piece' ? 'Stück' : 'g';
     const start = food.portion || food.serving || 100;
     const fav = food.id ? Store.isFavorite(food.id) : false;
@@ -829,7 +858,7 @@
       root.querySelector('#confirm-add').addEventListener('click', () => {
         const por = parseFloat(portion.value);
         if (!por || por <= 0) { toast('Menge eingeben'); return; }
-        Store.addDiaryEntry(food, por, selMeal, current === 'diary' ? diaryDate : Store.todayStr());
+        Store.addDiaryEntry(food, por, selMeal, day);
         closeModal();
         toast(`${food.name} hinzugefügt`);
         go('dashboard');
