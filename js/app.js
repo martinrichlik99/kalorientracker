@@ -38,6 +38,39 @@
   const pct = (v, t) => (t > 0 ? Math.min(100, Math.round((v / t) * 100)) : 0);
   const round = (n) => Math.round((n + Number.EPSILON) * 10) / 10;
 
+  // ---------- Passung (wie gut eine Portion zum Tagesrest passt) ----------
+  function restOf(day) {
+    const p = Store.getProfile(), s = Store.daySummary(day);
+    return { calories: p.dailyCalorieTarget - s.calories, protein: p.proteinTarget - s.protein, carbs: p.carbsTarget - s.carbs, fat: p.fatTarget - s.fat };
+  }
+  function nutrientsFor(food, portion) {
+    const f = food.unit === 'piece' ? portion : portion / 100;
+    return { calories: food.calories * f, protein: food.protein * f, carbs: food.carbs * f, fat: food.fat * f };
+  }
+  const defaultPortion = (food) => food.portion || food.serving || (food.unit === 'piece' ? 1 : 100);
+  const portionLabel = (food, por) => `${fmt(por)} ${food.unit === 'piece' ? 'Stück' : food.unit === 'ml' ? 'ml' : 'g'}`;
+  // Kalorien müssen in den Rest passen; Eiweiß soll mindestens anteilig mitkommen,
+  // Kohlenhydrate/Fett höchstens anteilig (+2 g Toleranz). Ergebnis 0–100, über dem Kalorienrest max. 74 (nie grün).
+  function fitScore(n, rest) {
+    if (n.calories <= 0) return 100;
+    if (rest.calories <= 0) return 0;
+    const share = n.calories / rest.calories;
+    const want = (m) => share * Math.max(0, rest[m]);
+    const protein = rest.protein <= 0 ? 1 : Math.min(1, n.protein / want('protein'));
+    const cap = (m) => (n[m] <= want(m) + 2 ? 1 : (want(m) + 2) / n[m]);
+    const score = Math.round(Math.min(1, 1 / share) * ((protein + cap('carbs') + cap('fat')) / 3) * 100);
+    return share > 1 ? Math.min(74, score) : score;
+  }
+  function fitBadge(score, hint) {
+    const c = score >= 75 ? 'bg-primary/10 text-primary' : score >= 50 ? 'bg-secondary-container/25 text-on-secondary-container' : 'bg-error/10 text-error';
+    return `<span class="fit-badge shrink-0 px-2 py-0.5 rounded-full text-label-sm font-bold ${c}" title="Passung ${esc(hint)}"><span class="sr-only">Passung ${esc(hint)}: </span>${score} %</span>`;
+  }
+  const foodFit = (food, rest) => {
+    const por = defaultPortion(food);
+    return { score: fitScore(nutrientsFor(food, por), rest), hint: `für ${portionLabel(food, por)}` };
+  };
+  const byFit = (list, rest) => list.map((f) => ({ f, s: foodFit(f, rest).score })).sort((a, b) => b.s - a.s).map((x) => x.f);
+
   function dateLabel(str) {
     const d = new Date(str + 'T00:00:00');
     return new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
@@ -333,13 +366,15 @@
     });
   }
 
-  function foodRow(food, editable = false) {
+  function foodRow(food, editable, rest) {
     const data = encodeURIComponent(JSON.stringify(food));
     const fav = Store.isFavorite(food.id);
+    const fit = foodFit(food, rest);
     return `<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex items-center justify-between">
       <div class="flex-1 min-w-0 pr-3">
         <p class="text-label-md text-on-surface truncate">${food.recipe ? '<span class="material-symbols-outlined text-[16px] text-tertiary align-[-3px] mr-1">skillet</span>' : ''}${esc(food.name)}</p>
         <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+          ${fitBadge(fit.score, fit.hint)}
           <span class="text-label-sm text-primary font-bold">${fmt(food.calories)} kcal<span class="text-outline font-normal">/100${food.unit === 'ml' ? 'ml' : 'g'}</span></span>
           <span class="text-label-sm text-on-surface-variant">E${fmt(food.protein)} K${fmt(food.carbs)} F${fmt(food.fat)}</span>
           ${food.serving && food.source === 'custom' ? `<span class="text-label-sm text-outline">1 Port. = ${fmt(food.serving)} g</span>` : ''}
@@ -359,11 +394,12 @@
     const recent = Store.getRecentFoods(6);
     const favs = Store.getFavorites();
     const custom = Store.getCustomFoods();
+    const day = fitDay(), rest = restOf(day);
     let html = '';
-    if (favs.length) html += section('Favoriten', favs.map((f) => foodRow(f)).join(''));
-    if (recent.length) html += section('Zuletzt verwendet', recent.map((f) => foodRow(f)).join(''));
-    if (custom.length) html += section('Eigene Lebensmittel & Rezepte', custom.map((f) => foodRow(f, true)).join(''));
-    if (!html) html = empty('Noch nichts gespeichert', 'Suche ein Lebensmittel oder lege ein eigenes an.');
+    if (favs.length) html += section('Favoriten', byFit(favs, rest).map((f) => foodRow(f, false, rest)).join(''));
+    if (recent.length) html += section('Zuletzt verwendet', byFit(recent, rest).map((f) => foodRow(f, false, rest)).join(''));
+    if (custom.length) html += section('Eigene Lebensmittel & Rezepte', custom.map((f) => foodRow(f, true, rest)).join(''));
+    html = html ? fitHint(day, favs.length || recent.length) + html : empty('Noch nichts gespeichert', 'Suche ein Lebensmittel oder lege ein eigenes an.');
     box.innerHTML = html;
   }
 
@@ -375,10 +411,11 @@
     try {
         // Lokale DE-Datenbank sofort (synchron)
       const local = FoodsDE.search(term);
+      const rest = restOf(fitDay());
       // Lokale Treffer sofort zeigen — Netzquellen schieben sich danach dazu
       if (local.length) {
         box.innerHTML =
-          section(`Treffer für „${esc(term)}"`, local.map((f) => foodRow(f)).join('')) +
+          section(`Treffer für „${esc(term)}"`, local.map((f) => foodRow(f, false, rest)).join('')) +
           `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">Suche weitere Quellen…</p>`;
       }
 
@@ -403,7 +440,7 @@
           ? `<p class="text-label-sm text-outline px-1 -mt-4 mb-6">OpenFoodFacts gerade nicht erreichbar — verpackte Produkte fehlen.</p>`
           : '';
       box.innerHTML = list.length
-        ? section(`Treffer für „${esc(term)}"`, list.map((f) => foodRow(f)).join('')) + hinweis
+        ? section(`Treffer für „${esc(term)}"`, list.map((f) => foodRow(f, false, rest)).join('')) + hinweis
         : empty(
             'Keine Treffer',
             offResults.status === 'rejected'
@@ -414,6 +451,12 @@
       if (err.name === 'AbortError') return;
       box.innerHTML = empty('Offline oder Fehler', 'OpenFoodFacts nicht erreichbar.');
     }
+  }
+
+  const fitDay = () => addDate || Store.todayStr();
+  function fitHint(day, sorted) {
+    const tag = day === Store.todayStr() ? 'von heute' : `am ${dateLabel(day)}`;
+    return `<p class="text-label-sm text-on-surface-variant px-1 mb-4"><span class="material-symbols-outlined text-[16px] align-[-3px] mr-1">target</span>% = wie gut die Portion zu deinem Rest ${tag} passt${sorted ? ' · beste zuerst' : ''}</p>`;
   }
 
   function section(title, inner) {
@@ -427,13 +470,15 @@
   // ---------- Favoriten ----------
   function renderFavorites() {
     const favs = Store.getFavorites();
+    const rest = restOf(Store.todayStr());
     const body = favs.length
-      ? `<div class="grid grid-cols-2 gap-4">${favs.map((f) => {
+      ? `${fitHint(Store.todayStr(), true)}<div class="grid grid-cols-2 gap-4">${byFit(favs, rest).map((f) => {
           const data = encodeURIComponent(JSON.stringify(f));
+          const fit = foodFit(f, rest);
           return `<div class="bg-surface-container-low p-4 rounded-2xl flex flex-col items-center text-center gap-2 border border-outline-variant/10">
             <button data-unfav="${esc(f.id)}" title="Favorit entfernen" class="unfav self-end -mt-2 -mr-2 w-10 h-10 flex items-center justify-center text-secondary active:scale-90 transition"><span class="material-symbols-outlined fill-icon">favorite</span></button>
             <p class="text-label-md text-on-surface truncate w-full">${esc(f.name)}</p>
-            <p class="text-label-sm text-outline">${fmt(f.calories)} kcal/100${f.unit === 'ml' ? 'ml' : 'g'}</p>
+            <div class="flex flex-col items-center gap-1">${fitBadge(fit.score, fit.hint)}<p class="text-label-sm text-outline">${fmt(f.calories)} kcal/100${f.unit === 'ml' ? 'ml' : 'g'}</p></div>
             <button class="add-food mt-1 w-full py-2 rounded-full bg-primary text-on-primary text-label-md active:scale-95 transition" data-food="${data}">Hinzufügen</button>
           </div>`;
         }).join('')}</div>`
@@ -825,20 +870,27 @@
       <div class="grid grid-cols-4 gap-2 mt-3 mb-5">
         ${quick.map(({ q, label }) => `<button data-q="${q}" class="quick-q py-2 rounded-lg bg-surface-container text-label-md text-on-surface-variant leading-tight active:scale-95 transition">${label}</button>`).join('')}
       </div>
-      <div class="flex items-center justify-between bg-primary/5 rounded-xl p-4 mb-4">
-        <span class="text-label-md text-on-surface-variant">Ergibt</span>
-        <span id="calc-kcal" class="text-headline-md text-primary">0 kcal</span>
+      <div id="calc-tiles" class="grid grid-cols-4 gap-2 mb-2"></div>
+      <div class="flex items-center justify-between gap-3 bg-surface-container-low rounded-xl px-4 py-3 mb-4">
+        <div class="min-w-0"><p class="text-label-sm text-on-surface-variant">Danach übrig ${day === Store.todayStr() ? 'heute' : `am ${dateLabel(day)}`}</p><p id="calc-rest" class="text-label-md text-on-surface"></p></div>
+        <span id="calc-fit"></span>
       </div>
       <button id="confirm-add" class="w-full py-4 rounded-xl bg-primary text-on-primary text-label-md flex items-center justify-center gap-2 active:scale-95 transition shadow-lg">
         <span class="material-symbols-outlined fill-icon text-[20px]">check_circle</span>Hinzufügen</button>
     `, (root) => {
       let selMeal = meal;
       const portion = root.querySelector('#portion');
-      const calc = root.querySelector('#calc-kcal');
+      const tiles = root.querySelector('#calc-tiles'), restEl = root.querySelector('#calc-rest'), fitEl = root.querySelector('#calc-fit');
+      const rest = restOf(day);
+      const tile = (v, unit, label, cls, valCls) => `<div class="rounded-xl py-2.5 text-center ${cls}"><p class="text-[20px] font-bold leading-none ${valCls}">${fmt(v)}<span class="text-label-sm ml-0.5">${unit}</span></p><p class="text-label-sm mt-1">${label}</p></div>`;
+      const left = (v, unit) => `<span class="${v < 0 ? 'text-error font-bold' : ''}">${fmt(v)}${unit}</span>`;
       const update = () => {
         const por = parseFloat(portion.value) || 0;
-        const factor = food.unit === 'piece' ? por : por / 100;
-        calc.textContent = `${fmt(food.calories * factor)} kcal`;
+        const n = nutrientsFor(food, por);
+        tiles.innerHTML = tile(n.calories, '', 'kcal', 'bg-primary text-on-primary', '')
+          + MACROS.map((m) => tile(n[m.key], 'g', m.label === 'Kohlenhydrate' ? 'Kohlenh.' : m.label, 'bg-surface-container text-on-surface-variant', m.text)).join('');
+        restEl.innerHTML = `${left(rest.calories - n.calories, ' kcal')} · E ${left(rest.protein - n.protein, '')} · K ${left(rest.carbs - n.carbs, '')} · F ${left(rest.fat - n.fat, ' g')}`;
+        fitEl.innerHTML = por > 0 ? fitBadge(fitScore(n, rest), `für ${portionLabel(food, por)}`) : '';
       };
       update();
       portion.addEventListener('input', update);
